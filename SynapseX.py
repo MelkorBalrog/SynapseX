@@ -16,7 +16,6 @@ from __future__ import annotations
 import io
 import re
 import sys
-import re
 from contextlib import redirect_stdout
 from pathlib import Path
 import tkinter as tk
@@ -68,6 +67,8 @@ class SynapseXGUI(tk.Tk):
         self.asm_text = tk.Text(self.asm_frame, wrap="none", font=("Consolas", 11))
         self.asm_text.tag_configure("instr", foreground="#0066CC")
         self.asm_text.tag_configure("number", foreground="#CC0000")
+        self.asm_text.tag_configure("comment", foreground="#008000")
+        self.asm_text.bind("<<Modified>>", self._on_asm_modified)
         x_scroll = ttk.Scrollbar(self.asm_frame, orient="horizontal", command=self.asm_text.xview)
         y_scroll = ttk.Scrollbar(self.asm_frame, orient="vertical", command=self.asm_text.yview)
         self.asm_text.configure(xscrollcommand=x_scroll.set, yscrollcommand=y_scroll.set)
@@ -113,20 +114,42 @@ class SynapseXGUI(tk.Tk):
             return
         path = sel[0]
         with open(path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
+            data = f.read()
         self.asm_text.delete("1.0", tk.END)
-        for line in lines:
-            line_start = self.asm_text.index(tk.END)
-            self.asm_text.insert(tk.END, line)
-            line_clean = line.rstrip("\n")
-            tokens = line_clean.split()
+        self.asm_text.insert(tk.END, data)
+        self._highlight_asm()
+
+    def _on_asm_modified(self, _event) -> None:
+        if self.asm_text.edit_modified():
+            self.asm_text.edit_modified(False)
+            self._highlight_asm()
+
+    def _highlight_asm(self) -> None:
+        text = self.asm_text.get("1.0", tk.END)
+        self.asm_text.tag_remove("instr", "1.0", tk.END)
+        self.asm_text.tag_remove("number", "1.0", tk.END)
+        self.asm_text.tag_remove("comment", "1.0", tk.END)
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            code, sep, _comment = line.partition(";")
+            tokens = code.split()
             if tokens:
-                end = f"{line_start}+{len(tokens[0])}c"
-                self.asm_text.tag_add("instr", line_start, end)
-                for match in re.finditer(r"\b-?(0x[0-9a-fA-F]+|\d+)\b", line_clean):
-                    num_start = f"{line_start}+{match.start()}c"
-                    num_end = f"{line_start}+{match.end()}c"
-                    self.asm_text.tag_add("number", num_start, num_end)
+                token = tokens[0]
+                col = code.find(token)
+                if token.endswith(":") and len(tokens) > 1:
+                    token = tokens[1]
+                    col = code.find(token)
+                start = f"{line_no}.{col}"
+                end = f"{start}+{len(token)}c"
+                self.asm_text.tag_add("instr", start, end)
+            for match in re.finditer(r"\b-?(0x[0-9a-fA-F]+|\d+)\b", code):
+                num_start = f"{line_no}.{match.start()}"
+                num_end = f"{line_no}.{match.end()}"
+                self.asm_text.tag_add("number", num_start, num_end)
+            if sep:
+                col = len(code)
+                start = f"{line_no}.{col}"
+                end = f"{line_no}.{len(line)}"
+                self.asm_text.tag_add("comment", start, end)
 
     def run_selected(self) -> None:
         sel = self.asm_tree.selection()
