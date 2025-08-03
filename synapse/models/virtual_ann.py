@@ -32,17 +32,20 @@ class VirtualANN(nn.Module):
         return self.net(x)
 
     def train_model(self, X: np.ndarray, y: np.ndarray, epochs: int, lr: float, batch_size: int):
-        """Train the ANN and display live loss/accuracy plots."""
+        """Train the ANN and display live training metrics."""
         dataset = TensorDataset(torch.from_numpy(X).float(), torch.from_numpy(y).long())
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
-        loss_hist, acc_hist = [], []
+        loss_hist, acc_hist, prec_hist, rec_hist, f1_hist = [], [], [], [], []
+        num_classes = self.layer_sizes[-1]
         self.train()
         for _ in range(epochs):
             epoch_loss = 0.0
             correct = 0
             total = 0
+            all_preds: list[int] = []
+            all_true: list[int] = []
             for xb, yb in loader:
                 optimizer.zero_grad()
                 preds = self(xb)
@@ -50,14 +53,34 @@ class VirtualANN(nn.Module):
                 loss.backward()
                 optimizer.step()
                 epoch_loss += loss.item() * xb.size(0)
-                correct += (preds.argmax(dim=1) == yb).sum().item()
+                pred_labels = preds.argmax(dim=1)
+                correct += (pred_labels == yb).sum().item()
                 total += xb.size(0)
+                all_preds.extend(pred_labels.cpu().numpy().tolist())
+                all_true.extend(yb.cpu().numpy().tolist())
             loss_hist.append(epoch_loss / total)
             acc_hist.append(correct / total if total else 0)
+            cm = np.zeros((num_classes, num_classes), dtype=int)
+            for t, p in zip(all_true, all_preds):
+                cm[t, p] += 1
+            precs, recs, f1s = [], [], []
+            for i in range(num_classes):
+                tp = cm[i, i]
+                fp = cm[:, i].sum() - tp
+                fn = cm[i, :].sum() - tp
+                prec = tp / (tp + fp) if (tp + fp) else 0.0
+                rec = tp / (tp + fn) if (tp + fn) else 0.0
+                f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
+                precs.append(prec)
+                recs.append(rec)
+                f1s.append(f1)
+            prec_hist.append(float(np.mean(precs)))
+            rec_hist.append(float(np.mean(recs)))
+            f1_hist.append(float(np.mean(f1s)))
         preds_full = self.predict(X)
-        self.visualize_training(loss_hist, acc_hist)
+        self.visualize_training(loss_hist, acc_hist, prec_hist, rec_hist, f1_hist)
         self.visualize_weights()
-        self.visualize_confusion_matrix(y, preds_full, self.layer_sizes[-1])
+        self.visualize_confusion_matrix(y, preds_full, num_classes)
 
     def predict(self, X: np.ndarray):
         self.eval()
@@ -78,8 +101,8 @@ class VirtualANN(nn.Module):
     # ------------------------------------------------------------------
     # Visualisation helpers
     # ------------------------------------------------------------------
-    def visualize_training(self, loss_hist, acc_hist):
-        """Plot loss and accuracy curves."""
+    def visualize_training(self, loss_hist, acc_hist, prec_hist, rec_hist, f1_hist):
+        """Plot training loss and evaluation metrics."""
         if not loss_hist:
             return
         epochs = range(1, len(loss_hist) + 1)
@@ -89,9 +112,13 @@ class VirtualANN(nn.Module):
         ax1.plot(epochs, loss_hist, color="tab:red", label="Loss")
         ax1.tick_params(axis="y", labelcolor="tab:red")
         ax2 = ax1.twinx()
-        ax2.set_ylabel("Accuracy", color="tab:blue")
-        ax2.plot(epochs, acc_hist, color="tab:blue", label="Accuracy")
-        ax2.tick_params(axis="y", labelcolor="tab:blue")
+        ax2.set_ylabel("Score")
+        ax2.plot(epochs, acc_hist, label="Accuracy", color="tab:blue")
+        ax2.plot(epochs, prec_hist, label="Precision", color="tab:orange")
+        ax2.plot(epochs, rec_hist, label="Recall", color="tab:green")
+        ax2.plot(epochs, f1_hist, label="F1", color="tab:purple")
+        ax2.tick_params(axis="y")
+        ax2.legend(loc="lower right")
         fig.tight_layout()
         plt.title("Training Progress")
         plt.show()
