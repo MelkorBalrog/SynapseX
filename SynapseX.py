@@ -13,14 +13,12 @@ Usage::
 """
 
 from __future__ import annotations
-
 import io
 import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, ttk
-
 from synapse.soc import SoC
 
 
