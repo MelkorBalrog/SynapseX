@@ -54,8 +54,10 @@ class VirtualANN(nn.Module):
                 total += xb.size(0)
             loss_hist.append(epoch_loss / total)
             acc_hist.append(correct / total if total else 0)
+        preds_full = self.predict(X)
         self.visualize_training(loss_hist, acc_hist)
         self.visualize_weights()
+        self.visualize_confusion_matrix(y, preds_full, self.layer_sizes[-1])
 
     def predict(self, X: np.ndarray):
         self.eval()
@@ -116,6 +118,25 @@ class VirtualANN(nn.Module):
         plt.imshow(img, cmap="seismic")
         plt.title("First Layer Avg Weights")
         plt.axis("off")
+        plt.show()
+
+    def visualize_confusion_matrix(self, y_true, y_pred, num_classes):
+        cm = np.zeros((num_classes, num_classes), dtype=int)
+        for t, p in zip(y_true, y_pred):
+            cm[t, p] += 1
+        print("Confusion matrix:\n", cm)
+        fig, ax = plt.subplots()
+        im = ax.imshow(cm, cmap=plt.cm.Blues)
+        ax.figure.colorbar(im, ax=ax)
+        ax.set_xlabel("Predicted")
+        ax.set_ylabel("Actual")
+        ax.set_xticks(range(num_classes))
+        ax.set_yticks(range(num_classes))
+        ax.set_title("Confusion Matrix")
+        for i in range(num_classes):
+            for j in range(num_classes):
+                ax.text(j, i, cm[i, j], ha="center", va="center", color="black")
+        plt.tight_layout()
         plt.show()
 
     # Persistence helpers -------------------------------------------------

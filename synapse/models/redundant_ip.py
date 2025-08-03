@@ -15,6 +15,7 @@ from typing import Dict, List
 import numpy as np
 
 from .virtual_ann import VirtualANN
+from synapsex.image_processing import load_process_shape_image
 
 
 class RedundantNeuralIP:
@@ -96,13 +97,32 @@ class RedundantNeuralIP:
             data_path = Path(self.train_data_dir) / "data.npy"
             labels_path = Path(self.train_data_dir) / "labels.npy"
             if not data_path.exists() or not labels_path.exists():
-                print(
-                    f"Training data not found in {self.train_data_dir} "
-                    "(expected data.npy and labels.npy)."
+                X_list: List[np.ndarray] = []
+                y_list: List[int] = []
+                letter2label = {"A": 0, "B": 1, "C": 2}
+                image_files = (
+                    sorted(Path(self.train_data_dir).glob("*.png"))
+                    + sorted(Path(self.train_data_dir).glob("*.jpg"))
                 )
-                return
-            X = np.load(data_path).astype(np.float32)
-            y = np.load(labels_path).astype(np.int64)
+                for img_path in image_files:
+                    letter = img_path.stem.split("_")[0].upper()
+                    if letter not in letter2label:
+                        continue
+                    processed = load_process_shape_image(
+                        str(img_path), out_dir=Path(self.train_data_dir) / "processed"
+                    )
+                    X_list.append(processed[0])
+                    y_list.append(letter2label[letter])
+                if not X_list:
+                    print("No training images found; aborting training.")
+                    return
+                X = np.stack(X_list).astype(np.float32)
+                y = np.array(y_list, dtype=np.int64)
+                np.save(data_path, X)
+                np.save(labels_path, y)
+            else:
+                X = np.load(data_path).astype(np.float32)
+                y = np.load(labels_path).astype(np.int64)
             self._cached_dataset = (X, y)
         else:
             X, y = self._cached_dataset

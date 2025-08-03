@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import numpy as np
 from PIL import Image
 from typing import List
@@ -105,9 +106,15 @@ def morph_dilate(binary_image: np.ndarray, kernel_size: int = 3, iterations: int
     return out
 
 
-def load_process_shape_image(path: str, target_size: int = 28, save: bool = True,
-                             canny_low: float = 50, canny_high: float = 150,
-                             dilation_iter: int = 1) -> List[np.ndarray]:
+def load_process_shape_image(
+    path: str,
+    target_size: int = 28,
+    save: bool = True,
+    canny_low: float = 50,
+    canny_high: float = 150,
+    dilation_iter: int = 1,
+    out_dir: str | None = None,
+) -> List[np.ndarray]:
     try:
         resample_bicubic = Image.Resampling.BICUBIC
         resample_lanczos = Image.Resampling.LANCZOS
@@ -128,11 +135,11 @@ def load_process_shape_image(path: str, target_size: int = 28, save: bool = True
             dtype=np.float32,
         ) / 255.0
         if save:
-            proc_dir = "processed_images"
-            os.makedirs(proc_dir, exist_ok=True)
-            base = os.path.basename(path)
+            base = Path(path).name
             fname, _ = os.path.splitext(base)
-            save_path = os.path.join(proc_dir, f"{fname}_rot{angle}.png")
+            proc_root = Path(out_dir) if out_dir else Path(path).parent / "processed_images"
+            proc_root.mkdir(parents=True, exist_ok=True)
+            save_path = proc_root / f"{fname}_rot{angle}.png"
             Image.fromarray((norm_img * 255).astype(np.uint8)).save(save_path)
         processed_images.append(norm_img.flatten())
     return processed_images

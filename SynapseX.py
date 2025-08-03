@@ -29,47 +29,53 @@ def load_asm_file(path: str | Path) -> list[str]:
 
 
 class SynapseXGUI(tk.Tk):
-    """Simple GUI to run assembly programs on the SoC."""
+    """GUI to run assembly programs on the SoC."""
 
     def __init__(self) -> None:
         super().__init__()
         self.title("SynapseX")
-        self.geometry("1000x600")
+        self.geometry("1100x650")
+        style = ttk.Style(self)
+        style.theme_use("clam")
         self._build_ui()
 
     def _build_ui(self) -> None:
-        paned = tk.PanedWindow(self, orient=tk.HORIZONTAL)
+        paned = ttk.Panedwindow(self, orient=tk.HORIZONTAL)
         paned.pack(fill=tk.BOTH, expand=1)
 
-        left = tk.Frame(paned)
-        right = tk.Frame(paned, width=200)
-        paned.add(left, stretch="always")
-        paned.add(right)
+        left = ttk.Frame(paned)
+        right = ttk.Frame(paned, width=240)
+        paned.add(left, weight=3)
+        paned.add(right, weight=1)
 
-        left_paned = tk.PanedWindow(left, orient=tk.VERTICAL)
+        left_paned = ttk.Panedwindow(left, orient=tk.VERTICAL)
         left_paned.pack(fill=tk.BOTH, expand=1)
 
-        self.asm_text = tk.Text(left_paned, wrap="none")
-        self.asm_text.tag_configure("instr", foreground="blue")
-        left_paned.add(self.asm_text, stretch="always")
+        self.asm_text = ScrolledText(left_paned, wrap="none", font=("Consolas", 11))
+        self.asm_text.tag_configure("instr", foreground="#0066CC")
+        left_paned.add(self.asm_text, weight=3)
 
         self.results_nb = ttk.Notebook(left_paned)
-        left_paned.add(self.results_nb)
+        left_paned.add(self.results_nb, weight=2)
 
-        self.asm_list = tk.Listbox(right)
-        self.asm_list.pack(fill=tk.BOTH, expand=1)
-        self.asm_list.bind("<<ListboxSelect>>", self.on_select_asm)
+        ttk.Label(right, text="Assembly Programs").pack(anchor="w", padx=5, pady=(5, 0))
+        self.asm_tree = ttk.Treeview(right, show="tree")
+        self.asm_tree.pack(fill=tk.BOTH, expand=1, padx=5)
+        self.asm_tree.bind("<<TreeviewSelect>>", self.on_select_asm)
 
-        run_btn = tk.Button(right, text="Run", command=self.run_selected)
-        run_btn.pack(fill=tk.X)
+        ttk.Separator(right, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5)
 
-        self.data_entry = tk.Entry(right)
-        self.data_entry.pack(fill=tk.X)
-        browse = tk.Button(right, text="Train Data…", command=self.choose_data_dir)
-        browse.pack(fill=tk.X)
+        run_btn = ttk.Button(right, text="Run Program", command=self.run_selected)
+        run_btn.pack(fill=tk.X, padx=5)
+
+        ttk.Label(right, text="Training Data").pack(anchor="w", padx=5, pady=(10, 0))
+        self.data_entry = ttk.Entry(right)
+        self.data_entry.pack(fill=tk.X, padx=5)
+        browse = ttk.Button(right, text="Browse…", command=self.choose_data_dir)
+        browse.pack(fill=tk.X, padx=5, pady=5)
 
         for asm_path in sorted(Path("asm").glob("*.asm")):
-            self.asm_list.insert(tk.END, str(asm_path))
+            self.asm_tree.insert("", tk.END, iid=str(asm_path), text=asm_path.name)
 
     def choose_data_dir(self) -> None:
         path = filedialog.askdirectory(title="Select Training Data Directory")
@@ -78,10 +84,10 @@ class SynapseXGUI(tk.Tk):
             self.data_entry.insert(0, path)
 
     def on_select_asm(self, _event) -> None:
-        sel = self.asm_list.curselection()
+        sel = self.asm_tree.selection()
         if not sel:
             return
-        path = self.asm_list.get(sel[0])
+        path = sel[0]
         with open(path, "r", encoding="utf-8") as f:
             lines = f.readlines()
         self.asm_text.delete("1.0", tk.END)
@@ -94,10 +100,10 @@ class SynapseXGUI(tk.Tk):
                 self.asm_text.tag_add("instr", start, end)
 
     def run_selected(self) -> None:
-        sel = self.asm_list.curselection()
+        sel = self.asm_tree.selection()
         if not sel:
             return
-        asm_path = Path(self.asm_list.get(sel[0]))
+        asm_path = Path(sel[0])
         train_dir = self.data_entry.get() or None
         soc = SoC(train_data_dir=train_dir)
         asm_lines = load_asm_file(asm_path)
@@ -106,8 +112,9 @@ class SynapseXGUI(tk.Tk):
         with redirect_stdout(buf):
             soc.run(max_steps=3000)
         out = buf.getvalue()
-        text = tk.Text(self.results_nb, wrap="word")
+        text = ScrolledText(self.results_nb, wrap="word", font=("Segoe UI", 10))
         text.insert(tk.END, out)
+        text.config(state="disabled")
         self.results_nb.add(text, text=f"Run {len(self.results_nb.tabs())+1}")
         self.results_nb.select(text)
 
