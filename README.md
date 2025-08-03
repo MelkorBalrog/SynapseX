@@ -25,6 +25,71 @@ python SynapseX.py train data/        # train on images in data/
 python SynapseX.py classify img.png   # classify an image
 ```
 
+## Machine Learning Algorithms
+
+SynapseX bundles several neural architectures and ensemble techniques:
+
+- **Transformer classifier.** Patch embeddings feed a stack of transformer
+  encoder layers followed by a linear head.
+- **Leaky‑ReLU feed‑forward network.** Deep fully connected layers with
+  `LEAKYRELU` activations.
+- **Combined‑step network.** Alternates dense layers with the custom
+  `COMBINED_STEP` operation.
+- **Monte Carlo dropout.** Dropout is kept active during inference and multiple
+  stochastic forward passes are averaged to approximate Bayesian inference.
+- **Bayesian majority voting.** Probabilities from several ANNs are combined to
+  yield a robust final prediction.
+
+### Principal ANN Topologies
+
+#### ANN0 – Transformer Classifier
+
+```mermaid
+graph TD
+    I0[Input 28x28] --> P[Patch Embedding]
+    P --> T1[Transformer]
+    T1 --> T2[Transformer]
+    T2 --> T3[Transformer]
+    T3 --> D[LeakyReLU]
+    D --> O0[3‑class Output]
+```
+
+#### ANN1 – Dense LeakyReLU Network
+
+```mermaid
+graph TD
+    I1[Input 784] --> L1[256 LeakyReLU]
+    L1 --> L2[2560 LeakyReLU]
+    L2 --> L3[256 LeakyReLU]
+    L3 --> L4[2560 LeakyReLU]
+    L4 --> L5[256 LeakyReLU]
+    L5 --> L6[2560 LeakyReLU]
+    L6 --> O1[3‑class Output]
+```
+
+#### ANN2 – Combined‑Step Network
+
+```mermaid
+graph TD
+    I2[Input 784] --> C1[256 LeakyReLU]
+    C1 --> S1[Combined Step 9256]
+    S1 --> C2[256 LeakyReLU]
+    C2 --> S2[Combined Step 9256]
+    S2 --> C3[256 LeakyReLU]
+    C3 --> S3[Combined Step 9256]
+    S3 --> O2[3‑class Output]
+```
+
+### Bayesian Majority Voting
+
+```mermaid
+graph TD
+    A0[ANN0] --> V[Bayesian\nVote]
+    A1[ANN1] --> V
+    A2[ANN2] --> V
+    V --> F[Final Class]
+```
+
 ## Architecture
 
 The project models a minimal SoC composed of a CPU, wishbone memory and a
