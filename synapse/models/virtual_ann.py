@@ -87,7 +87,13 @@ class VirtualANN(nn.Module):
         preds_full = self.predict(X)
 
         figs = []
-        fig = self.visualize_training(loss_hist, acc_hist)
+        fig = self.visualize_training(
+            loss_hist,
+            acc_hist,
+            prec_hist,
+            rec_hist,
+            f1_hist,
+        )
         if fig is not None:
             figs.append(fig)
         fig = self.visualize_weights()
