@@ -19,6 +19,13 @@ from contextlib import redirect_stdout
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, ttk
+
+try:  # Python <=3.10 ships scrolledtext as a submodule
+    from tkinter.scrolledtext import ScrolledText
+except Exception:  # pragma: no cover - fallback for some platforms
+    import tkinter.scrolledtext as _scrolledtext
+    ScrolledText = _scrolledtext.ScrolledText
+
 from synapse.soc import SoC
 
 
