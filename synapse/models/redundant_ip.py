@@ -9,6 +9,7 @@ neural network work to :class:`VirtualANN` instances.
 from __future__ import annotations
 
 from collections import Counter
+from pathlib import Path
 from typing import Dict, List
 
 import numpy as np
@@ -19,10 +20,12 @@ from .virtual_ann import VirtualANN
 class RedundantNeuralIP:
     """Container for multiple ANNs addressable by an ID."""
 
-    def __init__(self) -> None:
+    def __init__(self, train_data_dir: str | None = None) -> None:
         self.ann_map: Dict[int, VirtualANN] = {}
         self.layer_defs: Dict[int, List[int]] = {}
         self.last_result: int | None = None
+        self.train_data_dir = train_data_dir
+        self._cached_dataset: tuple[np.ndarray, np.ndarray] | None = None
 
     # ------------------------------------------------------------------
     # Assembly interface
@@ -85,9 +88,29 @@ class RedundantNeuralIP:
             return
         in_dim = ann.layer_sizes[0]
         out_dim = ann.layer_sizes[-1]
-        # create a small random dataset purely for demonstration
-        X = np.random.rand(20, in_dim).astype(np.float32)
-        y = np.random.randint(0, out_dim, size=20).astype(np.int64)
+
+        if self._cached_dataset is None:
+            if not self.train_data_dir:
+                print("No training data directory specified; aborting training.")
+                return
+            data_path = Path(self.train_data_dir) / "data.npy"
+            labels_path = Path(self.train_data_dir) / "labels.npy"
+            if not data_path.exists() or not labels_path.exists():
+                print(
+                    f"Training data not found in {self.train_data_dir} "
+                    "(expected data.npy and labels.npy)."
+                )
+                return
+            X = np.load(data_path).astype(np.float32)
+            y = np.load(labels_path).astype(np.int64)
+            self._cached_dataset = (X, y)
+        else:
+            X, y = self._cached_dataset
+
+        if X.shape[1] != in_dim or y.max() >= out_dim:
+            print("Training data dimensions do not match ANN configuration.")
+            return
+
         ann.train_model(X, y, epochs=epochs, lr=0.005, batch_size=16)
 
     # ------------------------------------------------------------------
