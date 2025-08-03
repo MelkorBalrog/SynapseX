@@ -1,4 +1,4 @@
-; (A) Define the 4 Principal ANNs with Transformer Layers
+# (A) Define the 4 Principal ANNs with Transformer Layers
 OP_NEUR CONFIG_ANN 0 CREATE_LAYER 784 2352 LEAKYRELU
 OP_NEUR CONFIG_ANN 0 SET_SHAPE 28 28 1
 OP_NEUR CONFIG_ANN 0 ADD_LAYER 2352 TRANSFORMER
@@ -23,10 +23,11 @@ OP_NEUR CONFIG_ANN 2 ADD_LAYER 256 LEAKYRELU
 OP_NEUR CONFIG_ANN 2 ADD_LAYER 9256 COMBINED_STEP
 OP_NEUR CONFIG_ANN 2 ADD_LAYER 3 NONE
 OP_NEUR CONFIG_ANN 2 FINALIZE
-; (B) Train Principal ANNs
+# (B) Train Principal ANNs
 OP_NEUR TRAIN_ANN 0 40 10
 OP_NEUR TRAIN_ANN 1 40 10
 OP_NEUR TRAIN_ANN 2 40 10
-; (C) Save all weights
+# (C) Save all weights
 OP_NEUR SAVE_ALL trained_weights
+# Training complete – display a green indicator to confirm success
 HALT
