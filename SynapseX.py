@@ -36,41 +36,6 @@ except Exception:  # pragma: no cover - fallback for some platforms
 from synapse.soc import SoC
 
 
-class ScrollableNotebook(ttk.Frame):
-    """A ``ttk.Notebook`` with a horizontal scrollbar for overflowing tabs."""
-
-    def __init__(self, master, **kwargs):
-        super().__init__(master)
-        self.canvas = tk.Canvas(self, highlightthickness=0)
-        self.h_scroll = ttk.Scrollbar(self, orient=tk.HORIZONTAL, command=self.canvas.xview)
-        self.canvas.configure(xscrollcommand=self.h_scroll.set)
-        self.notebook = ttk.Notebook(self.canvas, **kwargs)
-        self.canvas.create_window((0, 0), window=self.notebook, anchor="nw")
-        self.canvas.pack(fill=tk.BOTH, expand=1)
-        self.h_scroll.pack(fill=tk.X)
-        self.notebook.bind("<Configure>", self._on_configure)
-
-    def _on_configure(self, _event) -> None:
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-    # proxy common notebook methods
-    def add(self, child, **kw):
-        return self.notebook.add(child, **kw)
-
-    def tabs(self):
-        return self.notebook.tabs()
-
-    def select(self, tab=None):
-        return self.notebook.select(tab)
-
-    def nametowidget(self, name):
-        return self.notebook.nametowidget(name)
-
-    def bind(self, sequence=None, func=None, add=None):
-        return self.notebook.bind(sequence, func, add)
-
-
-
 def load_asm_file(path: str | Path) -> list[str]:
     """Read an assembly file and return a list of lines."""
     with open(path, "r", encoding="utf-8") as f:
@@ -132,7 +97,7 @@ class SynapseXGUI(tk.Tk):
         self.asm_frame.columnconfigure(0, weight=1)
         left_paned.add(self.asm_frame, weight=3)
 
-        self.results_nb = ScrollableNotebook(left_paned)
+        self.results_nb = ttk.Notebook(left_paned)
         left_paned.add(self.results_nb, weight=2)
         self.network_tabs: dict[str, ttk.Notebook] = {}
 
@@ -211,8 +176,7 @@ class SynapseXGUI(tk.Tk):
         if not path:
             return
         processed_dir = Path.cwd() / "processed"
-        processed_imgs = load_process_shape_image(path, out_dir=processed_dir, save=True)
-        processed = processed_imgs[0]
+        processed = load_process_shape_image(path, out_dir=processed_dir)[0]
         soc = SoC()
         base_addr = 0x5000
         for i, val in enumerate(processed):
@@ -226,7 +190,7 @@ class SynapseXGUI(tk.Tk):
         out = buf.getvalue()
         result = soc.cpu.get_reg("$t9")
         if "Classification" not in self.network_tabs:
-            sub_nb = ScrollableNotebook(self.results_nb)
+            sub_nb = ttk.Notebook(self.results_nb)
             self.results_nb.add(sub_nb, text="Classification")
             self.network_tabs["Classification"] = sub_nb
         sub_nb = self.network_tabs["Classification"]
@@ -234,14 +198,6 @@ class SynapseXGUI(tk.Tk):
         text.insert(tk.END, out + f"\nPredicted class: {result}\n")
         text.config(state="disabled")
         sub_nb.add(text, text=f"Run {len(sub_nb.tabs())+1}")
-
-        img_arr = (processed.reshape(28, 28) * 255).astype(np.uint8)
-        proc_photo = ImageTk.PhotoImage(Image.fromarray(img_arr))
-        img_lbl = ttk.Label(sub_nb, image=proc_photo)
-        img_lbl.image = proc_photo
-        self._figure_images.append(proc_photo)
-        sub_nb.add(img_lbl, text="Processed")
-
         sub_nb.select(text)
         self.results_nb.select(sub_nb)
 
@@ -250,9 +206,7 @@ class SynapseXGUI(tk.Tk):
         if not current:
             return
         widget = self.nametowidget(current)
-        if isinstance(widget, ScrollableNotebook):
-            sub_widget = widget.nametowidget(widget.select())
-        elif isinstance(widget, ttk.Notebook):
+        if isinstance(widget, ttk.Notebook):
             sub_widget = widget.nametowidget(widget.select())
         else:
             sub_widget = widget
@@ -308,7 +262,7 @@ class SynapseXGUI(tk.Tk):
         out = buf.getvalue()
         net_name = asm_path.stem
         if net_name not in self.network_tabs:
-            sub_nb = ScrollableNotebook(self.results_nb)
+            sub_nb = ttk.Notebook(self.results_nb)
             self.results_nb.add(sub_nb, text=net_name)
             self.network_tabs[net_name] = sub_nb
         sub_nb = self.network_tabs[net_name]
