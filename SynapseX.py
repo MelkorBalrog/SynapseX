@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Utility to run SynapseX assembly programs from external .asm files.
+"""Utility to run SynapseX assembly programs from external ``.asm`` files.
 
-This script loads assembly instructions from text files to program the
-System-on-Chip (SoC) model. Two programs are provided:
+This script supersedes the legacy ``chip.py`` entry point. It loads
+assembly instructions from text files to program the System-on-Chip (SoC)
+model. Two programs are provided:
   * ``asm/training.asm`` for training the on-chip ANNs.
   * ``asm/classification.asm`` for running inference and majority voting.
 
