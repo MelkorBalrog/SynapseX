@@ -273,17 +273,30 @@ class SynapseXGUI(tk.Tk):
         sub_nb.select(text)
         self.results_nb.select(sub_nb)
 
-        # add generated figures as notebook tabs
+        # add generated figures as notebook tabs with scrollbars
         for fig in soc.neural_ip.last_figures:
             buf_img = io.BytesIO()
             fig.savefig(buf_img, format="png")
             buf_img.seek(0)
             image = Image.open(buf_img)
             photo = ImageTk.PhotoImage(image)
-            lbl = ttk.Label(self.results_nb, image=photo)
-            lbl.image = photo
+
+            frame = ttk.Frame(self.results_nb)
+            canvas = tk.Canvas(frame, width=min(800, image.width), height=min(600, image.height))
+            hbar = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=canvas.xview)
+            vbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
+            canvas.configure(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
+            canvas.create_image(0, 0, image=photo, anchor="nw")
+            canvas.configure(scrollregion=(0, 0, image.width, image.height))
+
+            canvas.grid(row=0, column=0, sticky="nsew")
+            vbar.grid(row=0, column=1, sticky="ns")
+            hbar.grid(row=1, column=0, sticky="ew")
+            frame.rowconfigure(0, weight=1)
+            frame.columnconfigure(0, weight=1)
+
             self._figure_images.append(photo)
-            self.results_nb.add(lbl, text=f"Fig {len(self.results_nb.tabs())}")
+            self.results_nb.add(frame, text=f"Fig {len(self.results_nb.tabs()) + 1}")
             plt.close(fig)
 
 
