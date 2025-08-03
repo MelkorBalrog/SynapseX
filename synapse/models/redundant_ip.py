@@ -112,7 +112,7 @@ class RedundantNeuralIP:
                     if letter not in letter2label:
                         continue
                     processed = load_process_shape_image(
-                        str(img_path), out_dir=Path(self.train_data_dir) / "processed"
+                        str(img_path), out_dir=Path(self.train_data_dir) / "processed", save=True
                     )
                     X_list.append(processed[0])
                     y_list.append(letter2label[letter])

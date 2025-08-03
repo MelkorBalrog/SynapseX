@@ -99,7 +99,7 @@ class VirtualANN(nn.Module):
         fig = self.visualize_weights()
         if fig is not None:
             figs.append(fig)
-        fig = self.visualize_confusion_matrix(y, preds_full, self.layer_sizes[-1])
+        fig = self.visualize_confusion_matrix(y, preds_full)
         if fig is not None:
             figs.append(fig)
 
@@ -125,25 +125,28 @@ class VirtualANN(nn.Module):
     # Visualisation helpers
     # ------------------------------------------------------------------
     def visualize_training(self, loss_hist, acc_hist, prec_hist, rec_hist, f1_hist):
-        """Plot training loss and evaluation metrics."""
+        """Plot training loss and evaluation metrics in separate subplots."""
         if not loss_hist:
             return None
         epochs = range(1, len(loss_hist) + 1)
-        fig, ax1 = plt.subplots()
-        ax1.set_xlabel("Epoch")
-        ax1.set_ylabel("Loss", color="tab:red")
-        ax1.plot(epochs, loss_hist, color="tab:red", label="Loss")
-        ax1.tick_params(axis="y", labelcolor="tab:red")
-        ax2 = ax1.twinx()
-        ax2.set_ylabel("Score")
-        ax2.plot(epochs, acc_hist, label="Accuracy", color="tab:blue")
-        ax2.plot(epochs, prec_hist, label="Precision", color="tab:orange")
-        ax2.plot(epochs, rec_hist, label="Recall", color="tab:green")
-        ax2.plot(epochs, f1_hist, label="F1", color="tab:purple")
-        ax2.tick_params(axis="y")
-        ax2.legend(loc="lower right")
+        fig, axes = plt.subplots(5, 1, figsize=(8, 12), sharex=True)
+
+        axes[0].plot(epochs, loss_hist, color="tab:red")
+        axes[0].set_ylabel("Loss")
+        axes[0].set_title("Training Progress")
+
+        metrics = [
+            (acc_hist, "Accuracy", "tab:blue"),
+            (prec_hist, "Precision", "tab:orange"),
+            (rec_hist, "Recall", "tab:green"),
+            (f1_hist, "F1 Score", "tab:purple"),
+        ]
+        for ax, (hist, label, color) in zip(axes[1:], metrics):
+            ax.plot(epochs, hist, color=color)
+            ax.set_ylabel(label)
+
+        axes[-1].set_xlabel("Epoch")
         fig.tight_layout()
-        plt.title("Training Progress")
         return fig
 
     def visualize_weights(self):
@@ -171,22 +174,33 @@ class VirtualANN(nn.Module):
         ax.axis("off")
         return fig
 
-    def visualize_confusion_matrix(self, y_true, y_pred, num_classes):
-        cm = np.zeros((num_classes, num_classes), dtype=int)
+    def visualize_confusion_matrix(self, y_true, y_pred):
+        """Visualise binary confusion matrix labelled with TN/FP/FN/TP."""
+        cm = np.zeros((2, 2), dtype=int)
         for t, p in zip(y_true, y_pred):
-            cm[t, p] += 1
+            if t == 1 and p == 1:
+                cm[1, 1] += 1  # TP
+            elif t == 1 and p == 0:
+                cm[1, 0] += 1  # FN
+            elif t == 0 and p == 1:
+                cm[0, 1] += 1  # FP
+            else:
+                cm[0, 0] += 1  # TN
         print("Confusion matrix:\n", cm)
         fig, ax = plt.subplots()
         im = ax.imshow(cm, cmap=plt.cm.Blues)
         fig.colorbar(im, ax=ax)
         ax.set_xlabel("Predicted")
         ax.set_ylabel("Actual")
-        ax.set_xticks(range(num_classes))
-        ax.set_yticks(range(num_classes))
+        ax.set_xticks([0, 1])
+        ax.set_yticks([0, 1])
+        ax.set_xticklabels(["Negative", "Positive"])
+        ax.set_yticklabels(["Negative", "Positive"])
         ax.set_title("Confusion Matrix")
-        for i in range(num_classes):
-            for j in range(num_classes):
-                ax.text(j, i, cm[i, j], ha="center", va="center", color="black")
+        labels = [["TN", "FP"], ["FN", "TP"]]
+        for i in range(2):
+            for j in range(2):
+                ax.text(j, i, f"{labels[i][j]}: {cm[i, j]}", ha="center", va="center", color="black")
         plt.tight_layout()
         return fig
 
