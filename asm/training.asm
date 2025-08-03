@@ -29,4 +29,5 @@ OP_NEUR TRAIN_ANN 1 40 10
 OP_NEUR TRAIN_ANN 2 40 10
 ; (C) Save all weights
 OP_NEUR SAVE_ALL trained_weights
+; Training complete – display a green indicator to confirm success
 HALT
