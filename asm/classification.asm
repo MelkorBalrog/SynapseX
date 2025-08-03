@@ -92,9 +92,10 @@ BGT $t11, $t12, finalizeB
 ADDI $t9, $zero, 2
 J finalize_output
 finalizeA:
-ADDI $t9, $zero, 0
+ADDI $t9, $zero, 0           ; Class A selected – display a green indicator
 J finalize_output
 finalizeB:
-ADDI $t9, $zero, 1
+ADDI $t9, $zero, 1           ; Class B selected – no green indicator
 finalize_output:
+; Final result is in $t9. Use green color when class A is predicted.
 HALT
