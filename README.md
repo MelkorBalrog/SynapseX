@@ -39,6 +39,69 @@ graph TD
     Neural -->|model weights| Memory
 ```
 
+## Machine Learning Algorithms
+
+SynapseX bundles several machine‑learning techniques that can be composed from
+assembly instructions:
+
+- **VirtualANN** – a configurable feed‑forward network built from linear layers
+  with LeakyReLU activations and dropout regularisation.
+- **Transformer classifier** – images are split into patches and processed by a
+  lightweight transformer encoder before classification.
+- **Bayesian ensemble voting** – multiple ANNs predict with Monte Carlo
+  dropout to approximate Bayesian inference; their probability outputs are
+  averaged for a majority decision.
+
+The example `training.asm`/`classification.asm` programs configure three
+distinct ANNs.  ANN 0 mixes dense layers with stacked transformer blocks, ANN 1
+alternates wide and narrow fully connected layers, and ANN 2 experiments with a
+custom `COMBINED_STEP` module.  ANN 0's topology is illustrated below:
+
+```mermaid
+graph LR
+    I[784 inputs] --> L1[Linear 784→2352\n+LeakyReLU]
+    L1 --> T1[Transformer]
+    T1 --> T2[Transformer]
+    T2 --> T3[Transformer]
+    T3 --> L2[Linear 2352→3]
+```
+
+Bayesian majority voting across the ensemble is depicted here:
+
+```mermaid
+graph TD
+    X[Input image] --> A0[ANN 0]
+    X --> A1[ANN 1]
+    X --> A2[ANN 2]
+    A0 --> Vote[MC Dropout\nBayesian Vote]
+    A1 --> Vote
+    A2 --> Vote
+    Vote --> Pred[Final class]
+```
+
+## Training Process
+
+`training.asm` orchestrates dataset preparation and iterative optimisation of each
+`VirtualANN`.  Images labelled **A**, **B** and **C** are loaded from disk, shaped
+into a NumPy dataset and cached for reuse.  The network then trains with PyTorch
+using an Adam optimizer and cross‑entropy loss while dropout layers stay active
+to support later Bayesian voting.  After every epoch SynapseX records loss,
+accuracy, precision, recall and F1 before finally plotting the curves and
+serialising the model weights.
+
+The high‑level flow is shown below:
+
+```mermaid
+flowchart TD
+    A[Load & preprocess images] --> B[TensorDataset & DataLoader]
+    B --> C{Epoch loop}
+    C --> D[Forward pass]\nCrossEntropy
+    D --> E[Backprop & Adam step]
+    E --> F[Log metrics]
+    F --> C
+    C --> G[Generate plots & save weights]
+```
+
 ## Evaluation Metrics
 
 During training the `VirtualANN` network computes classic classification
