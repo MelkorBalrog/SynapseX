@@ -36,6 +36,40 @@ except Exception:  # pragma: no cover - fallback for some platforms
 from synapse.soc import SoC
 
 
+class ScrollableNotebook(ttk.Frame):
+    """A ``ttk.Notebook`` with a horizontal scrollbar for overflowing tabs."""
+
+    def __init__(self, master, **kwargs):
+        super().__init__(master)
+        self.canvas = tk.Canvas(self, highlightthickness=0)
+        self.h_scroll = ttk.Scrollbar(self, orient=tk.HORIZONTAL, command=self.canvas.xview)
+        self.canvas.configure(xscrollcommand=self.h_scroll.set)
+        self.notebook = ttk.Notebook(self.canvas, **kwargs)
+        self.canvas.create_window((0, 0), window=self.notebook, anchor="nw")
+        self.canvas.pack(fill=tk.BOTH, expand=1)
+        self.h_scroll.pack(fill=tk.X)
+        self.notebook.bind("<Configure>", self._on_configure)
+
+    def _on_configure(self, _event) -> None:
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    # Proxy common notebook methods
+    def add(self, child, **kw):
+        return self.notebook.add(child, **kw)
+
+    def tabs(self):
+        return self.notebook.tabs()
+
+    def select(self, tab=None):
+        return self.notebook.select(tab)
+
+    def nametowidget(self, name):
+        return self.notebook.nametowidget(name)
+
+    def bind(self, sequence=None, func=None, add=None):
+        return self.notebook.bind(sequence, func, add)
+
+
 def load_asm_file(path: str | Path) -> list[str]:
     """Read an assembly file and return a list of lines."""
     with open(path, "r", encoding="utf-8") as f:
@@ -97,9 +131,9 @@ class SynapseXGUI(tk.Tk):
         self.asm_frame.columnconfigure(0, weight=1)
         left_paned.add(self.asm_frame, weight=3)
 
-        self.results_nb = ttk.Notebook(left_paned)
+        self.results_nb = ScrollableNotebook(left_paned)
         left_paned.add(self.results_nb, weight=2)
-        self.network_tabs: dict[str, ttk.Notebook] = {}
+        self.network_tabs: dict[str, ScrollableNotebook] = {}
 
         ttk.Label(right, text="Assembly Programs").pack(anchor="w", padx=5, pady=(5, 0))
         self.asm_tree = ttk.Treeview(right, show="tree")
@@ -190,7 +224,7 @@ class SynapseXGUI(tk.Tk):
         out = buf.getvalue()
         result = soc.cpu.get_reg("$t9")
         if "Classification" not in self.network_tabs:
-            sub_nb = ttk.Notebook(self.results_nb)
+            sub_nb = ScrollableNotebook(self.results_nb)
             self.results_nb.add(sub_nb, text="Classification")
             self.network_tabs["Classification"] = sub_nb
         sub_nb = self.network_tabs["Classification"]
@@ -206,7 +240,9 @@ class SynapseXGUI(tk.Tk):
         if not current:
             return
         widget = self.nametowidget(current)
-        if isinstance(widget, ttk.Notebook):
+        if isinstance(widget, ScrollableNotebook):
+            sub_widget = widget.nametowidget(widget.select())
+        elif isinstance(widget, ttk.Notebook):
             sub_widget = widget.nametowidget(widget.select())
         else:
             sub_widget = widget
@@ -262,7 +298,7 @@ class SynapseXGUI(tk.Tk):
         out = buf.getvalue()
         net_name = asm_path.stem
         if net_name not in self.network_tabs:
-            sub_nb = ttk.Notebook(self.results_nb)
+            sub_nb = ScrollableNotebook(self.results_nb)
             self.results_nb.add(sub_nb, text=net_name)
             self.network_tabs[net_name] = sub_nb
         sub_nb = self.network_tabs[net_name]
