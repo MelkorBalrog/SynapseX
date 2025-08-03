@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import numpy as np
 from PIL import Image
-from typing import List
+from typing import Iterable, List
 
 
 def gaussian_kernel(size: int = 5, sigma: float = 1.4) -> np.ndarray:
@@ -114,6 +114,7 @@ def load_process_shape_image(
     canny_high: float = 150,
     dilation_iter: int = 1,
     out_dir: str | None = None,
+    angles: Iterable[int] = range(0, 181, 10),
 ) -> List[np.ndarray]:
     try:
         resample_bicubic = Image.Resampling.BICUBIC
@@ -129,7 +130,7 @@ def load_process_shape_image(
     # as strong gradients, resulting in thick square artefacts after rotation.
     bg_color = pil_img.getpixel((0, 0))
     processed_images = []
-    for angle in range(0, 181, 10):
+    for angle in angles:
         rotated = pil_img.rotate(
             angle, resample=resample_bicubic, expand=True, fillcolor=bg_color
         )
