@@ -80,38 +80,9 @@ class RedundantNeuralIP:
                 ann.load(path)
 
     def majority_vote(self, X: torch.Tensor) -> Tuple[int, torch.Tensor]:
-        """Combine ANN predictions using Bayesian model averaging.
-
-        Each network supplies a probability distribution over the classes.
-        Assuming independence and a uniform prior, the posterior for a class
-        is proportional to the product of the individual probabilities.  To
-        avoid numerical underflow the computation is carried out in log-space
-        and normalised via ``softmax``.
-
-        Parameters
-        ----------
-        X: torch.Tensor
-            Input tensor with shape ``(batch, channels, height, width)``.
-
-        Returns
-        -------
-        Tuple[int, torch.Tensor]
-            The predicted class index and the posterior probability vector for
-            the first sample in ``X``.
-        """
-
-        log_probs: List[torch.Tensor] = []
+        probs: List[torch.Tensor] = []
         for ann in self.ann_map.values():
-            # ``predict`` already applies softmax so the output is a proper
-            # probability distribution.  We add a small epsilon to guard
-            # against ``log(0)`` when a model is overly confident.
-            probs = ann.predict(X, mc_dropout=True)
-            log_probs.append((probs + 1e-9).log())
-
-        # Sum log-probabilities across models and exponentiate to obtain the
-        # unnormalised posterior.  ``softmax`` performs both steps and ensures
-        # numerical stability.
-        log_prob_stack = torch.stack(log_probs)
-        posterior = torch.softmax(log_prob_stack.sum(dim=0), dim=1)
-        pred = int(posterior.argmax(dim=1)[0])
-        return pred, posterior[0]
+            probs.append(ann.predict(X, mc_dropout=True))
+        mean_prob = torch.stack(probs).mean(0)
+        pred = int(mean_prob.argmax(dim=1)[0])
+        return pred, mean_prob[0]

@@ -111,20 +111,6 @@ class VirtualANN(nn.Module):
             logits = self(torch.from_numpy(X).float())
             return torch.argmax(logits, dim=1).cpu().numpy()
 
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        """Return class probabilities for the given inputs.
-
-        This mirrors :meth:`predict` but exposes the softmax probabilities
-        instead of only the winning class.  The probabilities are required for
-        Bayesian majority voting across multiple ANNs.
-        """
-
-        self.eval()
-        with torch.no_grad():
-            logits = self(torch.from_numpy(X).float())
-            probs = torch.softmax(logits, dim=1)
-            return probs.cpu().numpy()
-
     def predict_with_uncertainty(self, X: np.ndarray, mc_passes: int = 10):
         self.train()  # enable dropout at inference
         outputs = []
