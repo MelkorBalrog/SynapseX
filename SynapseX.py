@@ -14,7 +14,9 @@ Usage::
 
 from __future__ import annotations
 import io
+import re
 import sys
+import re
 from contextlib import redirect_stdout
 from pathlib import Path
 import tkinter as tk
@@ -62,12 +64,23 @@ class SynapseXGUI(tk.Tk):
         left_paned = ttk.Panedwindow(left, orient=tk.VERTICAL)
         left_paned.pack(fill=tk.BOTH, expand=1)
 
-        self.asm_text = ScrolledText(left_paned, wrap="none", font=("Consolas", 11))
+        self.asm_frame = ttk.Frame(left_paned)
+        self.asm_text = tk.Text(self.asm_frame, wrap="none", font=("Consolas", 11))
         self.asm_text.tag_configure("instr", foreground="#0066CC")
-        left_paned.add(self.asm_text, weight=3)
+        self.asm_text.tag_configure("number", foreground="#CC0000")
+        x_scroll = ttk.Scrollbar(self.asm_frame, orient="horizontal", command=self.asm_text.xview)
+        y_scroll = ttk.Scrollbar(self.asm_frame, orient="vertical", command=self.asm_text.yview)
+        self.asm_text.configure(xscrollcommand=x_scroll.set, yscrollcommand=y_scroll.set)
+        self.asm_text.grid(row=0, column=0, sticky="nsew")
+        y_scroll.grid(row=0, column=1, sticky="ns")
+        x_scroll.grid(row=1, column=0, sticky="ew")
+        self.asm_frame.rowconfigure(0, weight=1)
+        self.asm_frame.columnconfigure(0, weight=1)
+        left_paned.add(self.asm_frame, weight=3)
 
         self.results_nb = ttk.Notebook(left_paned)
         left_paned.add(self.results_nb, weight=2)
+        self.network_tabs: dict[str, ttk.Notebook] = {}
 
         ttk.Label(right, text="Assembly Programs").pack(anchor="w", padx=5, pady=(5, 0))
         self.asm_tree = ttk.Treeview(right, show="tree")
@@ -103,12 +116,17 @@ class SynapseXGUI(tk.Tk):
             lines = f.readlines()
         self.asm_text.delete("1.0", tk.END)
         for line in lines:
-            start = self.asm_text.index(tk.END)
+            line_start = self.asm_text.index(tk.END)
             self.asm_text.insert(tk.END, line)
-            tokens = line.strip().split()
+            line_clean = line.rstrip("\n")
+            tokens = line_clean.split()
             if tokens:
                 end = f"{start}+{len(tokens[0])}c"
                 self.asm_text.tag_add("instr", start, end)
+                for match in re.finditer(r"\b-?(0x[0-9a-fA-F]+|\d+)\b", line_clean):
+                    num_start = f"{start}+{match.start()}c"
+                    num_end = f"{start}+{match.end()}c"
+                    self.asm_text.tag_add("number", num_start, num_end)
 
     def run_selected(self) -> None:
         sel = self.asm_tree.selection()
@@ -123,11 +141,18 @@ class SynapseXGUI(tk.Tk):
         with redirect_stdout(buf):
             soc.run(max_steps=3000)
         out = buf.getvalue()
-        text = ScrolledText(self.results_nb, wrap="word", font=("Segoe UI", 10))
+        net_name = asm_path.stem
+        if net_name not in self.network_tabs:
+            sub_nb = ttk.Notebook(self.results_nb)
+            self.results_nb.add(sub_nb, text=net_name)
+            self.network_tabs[net_name] = sub_nb
+        sub_nb = self.network_tabs[net_name]
+        text = ScrolledText(sub_nb, wrap="word", font=("Segoe UI", 10))
         text.insert(tk.END, out)
         text.config(state="disabled")
-        self.results_nb.add(text, text=f"Run {len(self.results_nb.tabs())+1}")
-        self.results_nb.select(text)
+        sub_nb.add(text, text=f"Run {len(sub_nb.tabs())+1}")
+        sub_nb.select(text)
+        self.results_nb.select(sub_nb)
 
         # add generated figures as notebook tabs
         for fig in soc.neural_ip.last_figures:
