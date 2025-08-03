@@ -99,7 +99,7 @@ class VirtualANN(nn.Module):
         fig = self.visualize_weights()
         if fig is not None:
             figs.append(fig)
-        fig = self.visualize_confusion_matrix(y, preds_full, self.layer_sizes[-1])
+        fig = self.visualize_confusion_matrix(y, preds_full)
         if fig is not None:
             figs.append(fig)
 
@@ -125,68 +125,102 @@ class VirtualANN(nn.Module):
     # Visualisation helpers
     # ------------------------------------------------------------------
     def visualize_training(self, loss_hist, acc_hist, prec_hist, rec_hist, f1_hist):
-        """Plot training loss and evaluation metrics."""
+        """Plot training loss and evaluation metrics in separate subplots."""
         if not loss_hist:
             return None
         epochs = range(1, len(loss_hist) + 1)
-        fig, ax1 = plt.subplots()
-        ax1.set_xlabel("Epoch")
-        ax1.set_ylabel("Loss", color="tab:red")
-        ax1.plot(epochs, loss_hist, color="tab:red", label="Loss")
-        ax1.tick_params(axis="y", labelcolor="tab:red")
-        ax2 = ax1.twinx()
-        ax2.set_ylabel("Score")
-        ax2.plot(epochs, acc_hist, label="Accuracy", color="tab:blue")
-        ax2.plot(epochs, prec_hist, label="Precision", color="tab:orange")
-        ax2.plot(epochs, rec_hist, label="Recall", color="tab:green")
-        ax2.plot(epochs, f1_hist, label="F1", color="tab:purple")
-        ax2.tick_params(axis="y")
-        ax2.legend(loc="lower right")
+        fig, axes = plt.subplots(5, 1, figsize=(8, 12), sharex=True)
+
+        axes[0].plot(epochs, loss_hist, color="tab:red")
+        axes[0].set_ylabel("Loss")
+        axes[0].set_title("Training Progress")
+
+        metrics = [
+            (acc_hist, "Accuracy", "tab:blue"),
+            (prec_hist, "Precision", "tab:orange"),
+            (rec_hist, "Recall", "tab:green"),
+            (f1_hist, "F1 Score", "tab:purple"),
+        ]
+        for ax, (hist, label, color) in zip(axes[1:], metrics):
+            ax.plot(epochs, hist, color=color)
+            ax.set_ylabel(label)
+
+        axes[-1].set_xlabel("Epoch")
         fig.tight_layout()
-        plt.title("Training Progress")
         return fig
 
     def visualize_weights(self):
-        """Visualise the first layer weights as an image."""
-        first_layer = None
-        for mod in self.net:
-            if isinstance(mod, nn.Linear):
-                first_layer = mod
-                break
-        if first_layer is None:
+        """Visualise the weights of all linear layers.
+
+        Each linear layer of the network is displayed as a small heatmap where
+        every square corresponds to a neuron in that layer.  The numeric value
+        shown in each square is the mean of the neuron's incoming weights.  All
+        layers are placed into a single figure so that the caller can present
+        them on the same tab in the GUI.
+        """
+
+        layers = [mod for mod in self.net if isinstance(mod, nn.Linear)]
+        if not layers:
             return None
-        with torch.no_grad():
-            weights = first_layer.weight.cpu().numpy()
-        avg_w = weights.mean(axis=0)
-        side = int(np.sqrt(avg_w.size))
-        if side * side != avg_w.size:
-            # pad to square for display
-            pad = np.zeros(side * side)
-            pad[: avg_w.size] = avg_w
-            avg_w = pad
-        img = avg_w.reshape(side, side)
-        fig, ax = plt.subplots()
-        ax.imshow(img, cmap="seismic")
-        ax.set_title("First Layer Avg Weights")
-        ax.axis("off")
+
+        n_layers = len(layers)
+        cols = min(4, n_layers)
+        rows = int(np.ceil(n_layers / cols))
+        fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows))
+        axes = np.atleast_1d(axes).flatten()
+
+        for idx, (layer, ax) in enumerate(zip(layers, axes)):
+            with torch.no_grad():
+                weights = layer.weight.cpu().numpy()
+            # compute a single representative value per neuron
+            means = weights.mean(axis=1)
+            side = int(np.ceil(np.sqrt(means.size)))
+            grid = np.full(side * side, np.nan)
+            grid[: means.size] = means
+            grid = grid.reshape(side, side)
+            im = ax.imshow(grid, cmap="seismic")
+            ax.set_title(f"Layer {idx + 1} Weights")
+            ax.axis("off")
+            for i in range(side):
+                for j in range(side):
+                    cell_idx = i * side + j
+                    if cell_idx < means.size:
+                        ax.text(j, i, f"{grid[i, j]:.2f}", ha="center", va="center", color="black")
+
+        # hide any unused axes
+        for ax in axes[n_layers:]:
+            ax.axis("off")
+
+        fig.tight_layout()
         return fig
 
-    def visualize_confusion_matrix(self, y_true, y_pred, num_classes):
-        cm = np.zeros((num_classes, num_classes), dtype=int)
+    def visualize_confusion_matrix(self, y_true, y_pred):
+        """Visualise binary confusion matrix labelled with TN/FP/FN/TP."""
+        cm = np.zeros((2, 2), dtype=int)
         for t, p in zip(y_true, y_pred):
-            cm[t, p] += 1
+            if t == 1 and p == 1:
+                cm[1, 1] += 1  # TP
+            elif t == 1 and p == 0:
+                cm[1, 0] += 1  # FN
+            elif t == 0 and p == 1:
+                cm[0, 1] += 1  # FP
+            else:
+                cm[0, 0] += 1  # TN
         print("Confusion matrix:\n", cm)
         fig, ax = plt.subplots()
         im = ax.imshow(cm, cmap=plt.cm.Blues)
         fig.colorbar(im, ax=ax)
         ax.set_xlabel("Predicted")
         ax.set_ylabel("Actual")
-        ax.set_xticks(range(num_classes))
-        ax.set_yticks(range(num_classes))
+        ax.set_xticks([0, 1])
+        ax.set_yticks([0, 1])
+        ax.set_xticklabels(["Negative", "Positive"])
+        ax.set_yticklabels(["Negative", "Positive"])
         ax.set_title("Confusion Matrix")
-        for i in range(num_classes):
-            for j in range(num_classes):
-                ax.text(j, i, cm[i, j], ha="center", va="center", color="black")
+        labels = [["TN", "FP"], ["FN", "TP"]]
+        for i in range(2):
+            for j in range(2):
+                ax.text(j, i, f"{labels[i][j]}: {cm[i, j]}", ha="center", va="center", color="black")
         plt.tight_layout()
         return fig
 
