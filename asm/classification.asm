@@ -32,53 +32,76 @@ OP_NEUR INFER_ANN 1 true 10
 ADD $t1, $zero, $t9
 OP_NEUR INFER_ANN 2 true 10
 ADD $t2, $zero, $t9
-; (D) Manual Majority Voting Among the 4 ANNs
-ADDI $t10, $zero, 0
-ADDI $t11, $zero, 0
-ADDI $t12, $zero, 0
+; (D) Bayesian Fusion of ANN Predictions
+ADDI $t10, $zero, 0           ; logP_A
+ADDI $t11, $zero, 0           ; logP_B
+ADDI $t12, $zero, 0           ; logP_U
+ADDI $t13, $zero, -357        ; log(0.7)  * 1000
+ADDI $t14, $zero, -1897       ; log(0.15) * 1000
+
 BEQ $t0, $zero, ann0_isA
 ADDI $at, $zero, 1
 BEQ $t0, $at, ann0_isB
 J ann0_isU
 ann0_isA:
-ADDI $t10, $t10, 1
+ADD $t10, $t10, $t13
+ADD $t11, $t11, $t14
+ADD $t12, $t12, $t14
 J ann0_done
 ann0_isB:
-ADDI $t11, $t11, 1
+ADD $t10, $t10, $t14
+ADD $t11, $t11, $t13
+ADD $t12, $t12, $t14
 J ann0_done
 ann0_isU:
-ADDI $t12, $t12, 1
+ADD $t10, $t10, $t14
+ADD $t11, $t11, $t14
+ADD $t12, $t12, $t13
 J ann0_done
 ann0_done:
+
 BEQ $t1, $zero, ann1_isA
 ADDI $at, $zero, 1
 BEQ $t1, $at, ann1_isB
 J ann1_isU
 ann1_isA:
-ADDI $t10, $t10, 1
+ADD $t10, $t10, $t13
+ADD $t11, $t11, $t14
+ADD $t12, $t12, $t14
 J ann1_done
 ann1_isB:
-ADDI $t11, $t11, 1
+ADD $t10, $t10, $t14
+ADD $t11, $t11, $t13
+ADD $t12, $t12, $t14
 J ann1_done
 ann1_isU:
-ADDI $t12, $t12, 1
+ADD $t10, $t10, $t14
+ADD $t11, $t11, $t14
+ADD $t12, $t12, $t13
 J ann1_done
 ann1_done:
+
 BEQ $t2, $zero, ann2_isA
 ADDI $at, $zero, 1
 BEQ $t2, $at, ann2_isB
 J ann2_isU
 ann2_isA:
-ADDI $t10, $t10, 1
+ADD $t10, $t10, $t13
+ADD $t11, $t11, $t14
+ADD $t12, $t12, $t14
 J ann2_done
 ann2_isB:
-ADDI $t11, $t11, 1
+ADD $t10, $t10, $t14
+ADD $t11, $t11, $t13
+ADD $t12, $t12, $t14
 J ann2_done
 ann2_isU:
-ADDI $t12, $t12, 1
+ADD $t10, $t10, $t14
+ADD $t11, $t11, $t14
+ADD $t12, $t12, $t13
 J ann2_done
 ann2_done:
-; (E) Decide Final Class based on Majority Vote
+; (E) Decide Final Class based on Maximum Posterior
 BGT $t10, $t11, checkA_vsU
 BGT $t11, $t10, checkB_vsU
 ADDI $t9, $zero, 2
