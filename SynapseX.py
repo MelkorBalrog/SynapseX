@@ -1,79 +1,60 @@
-"""Main entry point for the refactored SynapseX project."""
+#!/usr/bin/env python3
+"""Utility to run SynapseX assembly programs from external ``.asm`` files.
+
+This script supersedes the legacy ``chip.py`` entry point. It loads
+assembly instructions from text files to program the System-on-Chip (SoC)
+model. Two programs are provided:
+  * ``asm/training.asm`` for training the on-chip ANNs.
+  * ``asm/classification.asm`` for running inference and majority voting.
+
+Usage:
+    python SynapseX.py train
+    python SynapseX.py classify path/to/image.png
+
+The SoC and CPU models are simplified and primarily execute the assembly
+instructions for configuration. Image handling for classification is left
+as an exercise; this refactor focuses on moving the assembly programs out
+of the Python source and into standalone ``.asm`` files.
+"""
+
+from __future__ import annotations
+
 import sys
-import os
-import numpy as np
-from config import hyperparameters as hp
+from pathlib import Path
+
 from synapse.soc import SoC
-from synapse.models.virtual_ann import PyTorchANN
-from synapse.utils.image_processing import load_and_preprocess
 
 
-def build_soc_with_anns():
-    soc = SoC()
-    # Create a few transformer-based ANNs using the hyperparameters
-    for ann_id in range(3):
-        ann = PyTorchANN(hp.IMAGE_SIZE, num_classes=hp.NUM_CLASSES, dropout=hp.DROPOUT)
-        soc.neural_ip.add_ann(ann_id, ann)
-    return soc
+def load_asm_file(path: str | Path) -> list[str]:
+    """Read an assembly file and return a list of lines."""
+    with open(path, "r", encoding="utf-8") as f:
+        return [line.rstrip("\n") for line in f]
 
 
-def _load_training_data():
-    class_map = {"A": 0, "B": 1, "C": 2}
-    X_list, y_list = [], []
-    if not os.path.isdir(hp.TRAIN_DATA_DIR):
-        raise FileNotFoundError(f"Training data folder '{hp.TRAIN_DATA_DIR}' not found")
-    for fn in os.listdir(hp.TRAIN_DATA_DIR):
-        if fn.lower().endswith((".png", ".jpg", ".jpeg")):
-            label = fn.split("_")[0].upper()
-            if label in class_map:
-                path = os.path.join(hp.TRAIN_DATA_DIR, fn)
-                X_list.append(load_and_preprocess(path, hp.IMAGE_SIDE))
-                y_list.append(class_map[label])
-    if not X_list:
-        raise RuntimeError("No training images found in train_data")
-    return np.array(X_list, dtype=np.float32), np.array(y_list, dtype=int)
-
-
-def train_mode():
-    soc = build_soc_with_anns()
-    X, y = _load_training_data()
-    os.makedirs(hp.WEIGHTS_DIR, exist_ok=True)
-    for ann_id, ann in soc.neural_ip.ann_map.items():
-        soc.neural_ip.train_ann(ann_id, X, y, epochs=hp.EPOCHS, lr=hp.LEARNING_RATE, batch_size=hp.BATCH_SIZE)
-        weight_path = os.path.join(hp.WEIGHTS_DIR, f"ann{ann_id}.pt")
-        ann.save(weight_path)
-    print("Training complete")
-
-
-def classify_mode(img_path: str):
-    if not os.path.exists(img_path):
-        raise FileNotFoundError(f"Image '{img_path}' not found")
-    soc = build_soc_with_anns()
-    for ann_id, ann in soc.neural_ip.ann_map.items():
-        weight_path = os.path.join(hp.WEIGHTS_DIR, f"ann{ann_id}.pt")
-        if os.path.exists(weight_path):
-            ann.load(weight_path)
-        else:
-            print(f"Warning: weights for ANN{ann_id} not found; using untrained model")
-    sample = load_and_preprocess(img_path, hp.IMAGE_SIDE).reshape(1, -1)
-    majority, preds = soc.neural_ip.predict_majority(sample, mc_passes=hp.MC_PASSES)
-    print(f"Predicted class {majority} from votes {preds}")
-
-
-def main():
+def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: python SynapseX.py [train|classify]")
+        print("Usage:\n  python SynapseX.py train\n  python SynapseX.py classify path/to/image.png")
         return
+
     mode = sys.argv[1].lower()
+    soc = SoC()
+
     if mode == "train":
-        train_mode()
+        asm_lines = load_asm_file(Path("asm") / "training.asm")
+        soc.load_assembly(asm_lines)
+        soc.run(max_steps=3000)
+        print("\nTraining Phase Completed!")
     elif mode == "classify":
         if len(sys.argv) < 3:
             print("Usage: python SynapseX.py classify path/to/image.png")
             return
-        classify_mode(sys.argv[2])
+        # Placeholder for image handling; assembly handles ANN operations.
+        asm_lines = load_asm_file(Path("asm") / "classification.asm")
+        soc.load_assembly(asm_lines)
+        soc.run(max_steps=3000)
+        print("\nClassification Phase Completed!")
     else:
-        print(f"Unknown mode {mode}")
+        print(f"Unknown mode: {mode}. Use 'train' or 'classify'.")
 
 
 if __name__ == "__main__":
