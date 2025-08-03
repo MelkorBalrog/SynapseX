@@ -121,11 +121,11 @@ class SynapseXGUI(tk.Tk):
             line_clean = line.rstrip("\n")
             tokens = line_clean.split()
             if tokens:
-                end = f"{start}+{len(tokens[0])}c"
-                self.asm_text.tag_add("instr", start, end)
+                end = f"{line_start}+{len(tokens[0])}c"
+                self.asm_text.tag_add("instr", line_start, end)
                 for match in re.finditer(r"\b-?(0x[0-9a-fA-F]+|\d+)\b", line_clean):
-                    num_start = f"{start}+{match.start()}c"
-                    num_end = f"{start}+{match.end()}c"
+                    num_start = f"{line_start}+{match.start()}c"
+                    num_end = f"{line_start}+{match.end()}c"
                     self.asm_text.tag_add("number", num_start, num_end)
 
     def run_selected(self) -> None:
