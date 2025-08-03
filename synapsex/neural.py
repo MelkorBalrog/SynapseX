@@ -48,7 +48,9 @@ class PyTorchANN:
         torch.save(self.model.state_dict(), path)
 
     def load(self, path: str) -> None:
-        self.model.load_state_dict(torch.load(path, map_location="cpu"))
+        state = torch.load(path, map_location="cpu")
+        # Allow loading models saved without positional embeddings
+        self.model.load_state_dict(state, strict=False)
 
 
 class RedundantNeuralIP:
