@@ -33,6 +33,7 @@ class VirtualANN(nn.Module):
 
     def train_model(self, X: np.ndarray, y: np.ndarray, epochs: int, lr: float, batch_size: int):
         """Train the ANN and display live training metrics."""
+
         dataset = TensorDataset(torch.from_numpy(X).float(), torch.from_numpy(y).long())
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
         criterion = nn.CrossEntropyLoss()
@@ -104,7 +105,7 @@ class VirtualANN(nn.Module):
     def visualize_training(self, loss_hist, acc_hist, prec_hist, rec_hist, f1_hist):
         """Plot training loss and evaluation metrics."""
         if not loss_hist:
-            return
+            return None
         epochs = range(1, len(loss_hist) + 1)
         fig, ax1 = plt.subplots()
         ax1.set_xlabel("Epoch")
@@ -120,8 +121,8 @@ class VirtualANN(nn.Module):
         ax2.tick_params(axis="y")
         ax2.legend(loc="lower right")
         fig.tight_layout()
-        plt.title("Training Progress")
-        plt.show()
+        ax1.set_title("Training Progress")
+        return fig
 
     def visualize_weights(self):
         """Visualise the first layer weights as an image."""
@@ -131,7 +132,7 @@ class VirtualANN(nn.Module):
                 first_layer = mod
                 break
         if first_layer is None:
-            return
+            return None
         with torch.no_grad():
             weights = first_layer.weight.cpu().numpy()
         avg_w = weights.mean(axis=0)
@@ -142,10 +143,12 @@ class VirtualANN(nn.Module):
             pad[: avg_w.size] = avg_w
             avg_w = pad
         img = avg_w.reshape(side, side)
-        plt.imshow(img, cmap="seismic")
-        plt.title("First Layer Avg Weights")
-        plt.axis("off")
-        plt.show()
+        fig, ax = plt.subplots()
+        ax.imshow(img, cmap="seismic")
+        ax.set_title("First Layer Avg Weights")
+        ax.axis("off")
+        fig.tight_layout()
+        return fig
 
     def visualize_confusion_matrix(self, y_true, y_pred, num_classes):
         cm = np.zeros((num_classes, num_classes), dtype=int)
@@ -154,7 +157,7 @@ class VirtualANN(nn.Module):
         print("Confusion matrix:\n", cm)
         fig, ax = plt.subplots()
         im = ax.imshow(cm, cmap=plt.cm.Blues)
-        ax.figure.colorbar(im, ax=ax)
+        fig.colorbar(im, ax=ax)
         ax.set_xlabel("Predicted")
         ax.set_ylabel("Actual")
         ax.set_xticks(range(num_classes))
@@ -163,8 +166,8 @@ class VirtualANN(nn.Module):
         for i in range(num_classes):
             for j in range(num_classes):
                 ax.text(j, i, cm[i, j], ha="center", va="center", color="black")
-        plt.tight_layout()
-        plt.show()
+        fig.tight_layout()
+        return fig
 
     # Persistence helpers -------------------------------------------------
     def save(self, path: str):

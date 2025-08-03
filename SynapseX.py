@@ -16,10 +16,13 @@ from __future__ import annotations
 import io
 import re
 import sys
+import re
 from contextlib import redirect_stdout
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, ttk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
 
 try:  # Python <=3.10 ships scrolledtext as a submodule
     from tkinter.scrolledtext import ScrolledText
@@ -111,7 +114,7 @@ class SynapseXGUI(tk.Tk):
             lines = f.readlines()
         self.asm_text.delete("1.0", tk.END)
         for line in lines:
-            start = self.asm_text.index(tk.END)
+            line_start = self.asm_text.index(tk.END)
             self.asm_text.insert(tk.END, line)
             line_clean = line.rstrip("\n")
             tokens = line_clean.split()
@@ -129,7 +132,7 @@ class SynapseXGUI(tk.Tk):
             return
         asm_path = Path(sel[0])
         train_dir = self.data_entry.get() or None
-        soc = SoC(train_data_dir=train_dir)
+        soc = SoC(train_data_dir=train_dir, collect_figures=True)
         asm_lines = load_asm_file(asm_path)
         soc.load_assembly(asm_lines)
         buf = io.StringIO()

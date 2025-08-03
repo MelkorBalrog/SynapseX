@@ -21,12 +21,14 @@ from synapsex.image_processing import load_process_shape_image
 class RedundantNeuralIP:
     """Container for multiple ANNs addressable by an ID."""
 
-    def __init__(self, train_data_dir: str | None = None) -> None:
+    def __init__(self, train_data_dir: str | None = None, collect_figures: bool = False) -> None:
         self.ann_map: Dict[int, VirtualANN] = {}
         self.layer_defs: Dict[int, List[int]] = {}
         self.last_result: int | None = None
         self.train_data_dir = train_data_dir
         self._cached_dataset: tuple[np.ndarray, np.ndarray] | None = None
+        self.collect_figures = collect_figures
+        self.figures: List[object] = []
 
     # ------------------------------------------------------------------
     # Assembly interface
@@ -131,7 +133,11 @@ class RedundantNeuralIP:
             print("Training data dimensions do not match ANN configuration.")
             return
 
-        ann.train_model(X, y, epochs=epochs, lr=0.005, batch_size=16)
+        figs = ann.train_model(
+            X, y, epochs=epochs, lr=0.005, batch_size=16, return_figures=self.collect_figures
+        )
+        if self.collect_figures and figs:
+            self.figures.extend(figs)
 
     # ------------------------------------------------------------------
     # INFER_ANN helpers
