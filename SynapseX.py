@@ -19,6 +19,8 @@ from contextlib import redirect_stdout
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, ttk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
 
 try:  # Python <=3.10 ships scrolledtext as a submodule
     from tkinter.scrolledtext import ScrolledText
@@ -112,18 +114,28 @@ class SynapseXGUI(tk.Tk):
             return
         asm_path = Path(sel[0])
         train_dir = self.data_entry.get() or None
-        soc = SoC(train_data_dir=train_dir)
+        soc = SoC(train_data_dir=train_dir, collect_figures=True)
         asm_lines = load_asm_file(asm_path)
         soc.load_assembly(asm_lines)
         buf = io.StringIO()
         with redirect_stdout(buf):
             soc.run(max_steps=3000)
         out = buf.getvalue()
+        run_idx = len(self.results_nb.tabs()) + 1
         text = ScrolledText(self.results_nb, wrap="word", font=("Segoe UI", 10))
         text.insert(tk.END, out)
         text.config(state="disabled")
-        self.results_nb.add(text, text=f"Run {len(self.results_nb.tabs())+1}")
+        self.results_nb.add(text, text=f"Run {run_idx}")
         self.results_nb.select(text)
+        for i, fig in enumerate(soc.neural_ip.figures, start=1):
+            frame = ttk.Frame(self.results_nb)
+            canvas = FigureCanvasTkAgg(fig, master=frame)
+            canvas.draw()
+            canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
+            self.results_nb.add(frame, text=f"Run {run_idx} Fig {i}")
+            self.results_nb.select(frame)
+            plt.close(fig)
+        soc.neural_ip.figures.clear()
 
 
 def main() -> None:
