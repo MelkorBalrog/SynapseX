@@ -18,9 +18,21 @@ class SoC:
         self.asm_program = []
         self.label_map = {}
 
+    # ------------------------------------------------------------------
     def load_assembly(self, lines):
+        """Load assembly program and build label map."""
         self.asm_program = lines[:]
+        self._preprocess_labels()
 
+    def _preprocess_labels(self):
+        self.label_map = {}
+        for idx, line in enumerate(self.asm_program):
+            stripped = line.strip()
+            if stripped.endswith(":"):
+                self.label_map[stripped[:-1]] = idx
+        self.cpu.set_label_map(self.label_map)
+
+    # ------------------------------------------------------------------
     def run(self, max_steps=100):
         for _ in range(max_steps):
             if self.cpu.running:
