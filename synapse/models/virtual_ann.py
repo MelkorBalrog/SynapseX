@@ -60,15 +60,15 @@ class TransformerClassifier(nn.Module):
         super().__init__()
         embed_dim = ((input_dim + nhead - 1) // nhead) * nhead
         self.proj = nn.Linear(input_dim, embed_dim)
-        encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=nhead, dropout=dropout)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=nhead, dropout=dropout, batch_first=True)
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=1)
         self.classifier = nn.Linear(embed_dim, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.proj(x)
-        x = x.unsqueeze(0)  # (1, batch, embed_dim)
+        x = x.unsqueeze(1)  # (batch, 1, embed_dim)
         x = self.encoder(x)
-        x = x.squeeze(0)
+        x = x.squeeze(1)
         return self.classifier(x)
 
 
@@ -107,3 +107,9 @@ class PyTorchANN:
         mean = np.mean(outputs, axis=0)
         var = np.var(outputs, axis=0)
         return mean, var
+
+    def save(self, path: str):
+        torch.save(self.model.state_dict(), path)
+
+    def load(self, path: str):
+        self.model.load_state_dict(torch.load(path))

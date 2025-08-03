@@ -6,6 +6,12 @@ from PIL import Image
 from numba import njit
 
 
+def load_and_preprocess(path: str, target_size: int) -> np.ndarray:
+    """Load an image file, convert to grayscale, resize and flatten to [0,1]."""
+    img = Image.open(path).convert("L").resize((target_size, target_size))
+    arr = np.array(img, dtype=np.float32) / 255.0
+    return arr.flatten()
+
 def gaussian_kernel(size=5, sigma=1.4):
     ax = np.linspace(-(size - 1) // 2, (size - 1) // 2, size)
     xx, yy = np.meshgrid(ax, ax)
