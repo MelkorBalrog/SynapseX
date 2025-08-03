@@ -23,6 +23,9 @@ import tkinter as tk
 from tkinter import filedialog, ttk
 from PIL import Image, ImageTk
 import matplotlib.pyplot as plt
+import numpy as np
+
+from synapsex.image_processing import load_process_shape_image
 
 try:  # Python <=3.10 ships scrolledtext as a submodule
     from tkinter.scrolledtext import ScrolledText
@@ -48,9 +51,24 @@ class SynapseXGUI(tk.Tk):
         self.geometry("1100x650")
         style = ttk.Style(self)
         style.theme_use("clam")
+        self.current_asm_path: Path | None = None
+        self._build_menu()
         self._build_ui()
         # keep references to PhotoImage objects to avoid garbage collection
         self._figure_images: list[ImageTk.PhotoImage] = []
+
+    def _build_menu(self) -> None:
+        menubar = tk.Menu(self)
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Open ASM...", command=self.menu_open_asm)
+        file_menu.add_command(label="Save ASM...", command=self.menu_save_asm)
+        file_menu.add_separator()
+        file_menu.add_command(label="Load Image...", command=self.menu_load_image)
+        file_menu.add_command(label="Save Report...", command=self.menu_save_report)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=self.destroy)
+        menubar.add_cascade(label="File", menu=file_menu)
+        self.config(menu=menubar)
 
     def _build_ui(self) -> None:
         paned = ttk.Panedwindow(self, orient=tk.HORIZONTAL)
@@ -113,11 +131,96 @@ class SynapseXGUI(tk.Tk):
         if not sel:
             return
         path = sel[0]
+        self.current_asm_path = Path(path)
         with open(path, "r", encoding="utf-8") as f:
             data = f.read()
         self.asm_text.delete("1.0", tk.END)
         self.asm_text.insert(tk.END, data)
         self._highlight_asm()
+
+    def menu_open_asm(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Open ASM Program",
+            filetypes=[("ASM Files", "*.asm"), ("All Files", "*.*")],
+        )
+        if not path:
+            return
+        self.current_asm_path = Path(path)
+        with open(path, "r", encoding="utf-8") as f:
+            data = f.read()
+        self.asm_text.delete("1.0", tk.END)
+        self.asm_text.insert(tk.END, data)
+        self._highlight_asm()
+
+    def menu_save_asm(self) -> None:
+        if self.current_asm_path is None:
+            path = filedialog.asksaveasfilename(
+                title="Save ASM Program",
+                defaultextension=".asm",
+                filetypes=[("ASM Files", "*.asm"), ("All Files", "*.*")],
+            )
+            if not path:
+                return
+            self.current_asm_path = Path(path)
+        with open(self.current_asm_path, "w", encoding="utf-8") as f:
+            f.write(self.asm_text.get("1.0", tk.END))
+
+    def menu_load_image(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Select Image to Classify",
+            filetypes=[
+                ("Image Files", "*.png *.jpg *.jpeg *.bmp"),
+                ("All Files", "*.*"),
+            ],
+        )
+        if not path:
+            return
+        processed_dir = Path.cwd() / "processed"
+        processed = load_process_shape_image(path, out_dir=processed_dir)[0]
+        soc = SoC()
+        base_addr = 0x5000
+        for i, val in enumerate(processed):
+            word = np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
+            soc.memory.write(base_addr + i, int(word))
+        asm_lines = load_asm_file(Path("asm") / "classification.asm")
+        soc.load_assembly(asm_lines)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            soc.run(max_steps=3000)
+        out = buf.getvalue()
+        result = soc.cpu.get_reg("$t9")
+        if "Classification" not in self.network_tabs:
+            sub_nb = ttk.Notebook(self.results_nb)
+            self.results_nb.add(sub_nb, text="Classification")
+            self.network_tabs["Classification"] = sub_nb
+        sub_nb = self.network_tabs["Classification"]
+        text = ScrolledText(sub_nb, wrap="word", font=("Segoe UI", 10))
+        text.insert(tk.END, out + f"\nPredicted class: {result}\n")
+        text.config(state="disabled")
+        sub_nb.add(text, text=f"Run {len(sub_nb.tabs())+1}")
+        sub_nb.select(text)
+        self.results_nb.select(sub_nb)
+
+    def menu_save_report(self) -> None:
+        current = self.results_nb.select()
+        if not current:
+            return
+        widget = self.nametowidget(current)
+        if isinstance(widget, ttk.Notebook):
+            sub_widget = widget.nametowidget(widget.select())
+        else:
+            sub_widget = widget
+        if not isinstance(sub_widget, (tk.Text, ScrolledText)):
+            return
+        content = sub_widget.get("1.0", tk.END)
+        path = filedialog.asksaveasfilename(
+            title="Save Report",
+            defaultextension=".txt",
+            filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")],
+        )
+        if path:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
 
     def _on_asm_modified(self, _event) -> None:
         if self.asm_text.edit_modified():
