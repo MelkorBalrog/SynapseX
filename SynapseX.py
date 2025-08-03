@@ -1,78 +1,49 @@
-"""Main entry point for SynapseX refactored with PyTorch."""
-
-import argparse
-import os
-from typing import List
-
+"""Main entry point for the refactored SynapseX project."""
+import sys
 import numpy as np
-import torch
-
-from synapsex.config import hp
-from synapsex.image_processing import load_process_shape_image
-from synapsex.neural import RedundantNeuralIP
+from config import hyperparameters as hp
+from synapse.soc import SoC
+from synapse.models.virtual_ann import PyTorchANN
 
 
-LETTER_MAP = {"A": 0, "B": 1, "C": 2}
-INV_LETTER_MAP = {v: k for k, v in LETTER_MAP.items()}
-
-
-def build_dataset(folder: str) -> tuple:
-    X: List[np.ndarray] = []
-    y: List[int] = []
-    for fn in os.listdir(folder):
-        if not fn.lower().endswith((".png", ".jpg")):
-            continue
-        letter = fn.split("_")[0].upper()
-        if letter not in LETTER_MAP:
-            continue
-        path = os.path.join(folder, fn)
-        processed = load_process_shape_image(path, target_size=hp.image_size, save=False)
-        X.append(processed[0])  # only keep first rotation
-        y.append(LETTER_MAP[letter])
-    X_tensor = torch.tensor(np.array(X), dtype=torch.float32)
-    y_tensor = torch.tensor(y, dtype=torch.long)
-    return X_tensor, y_tensor
-
-
-def train() -> None:
-    dataset_path = "train_data"
-    X, y = build_dataset(dataset_path)
-    ip = RedundantNeuralIP()
+def build_soc_with_anns():
+    soc = SoC()
+    # Create a few transformer-based ANNs using the hyperparameters
     for ann_id in range(3):
-        ip.create_ann(ann_id)
-        ip.train_ann(ann_id, X, y)
-    ip.save_all("weights")
-    print("Training complete.")
+        ann = PyTorchANN(hp.IMAGE_SIZE, num_classes=hp.NUM_CLASSES, dropout=hp.DROPOUT)
+        soc.neural_ip.add_ann(ann_id, ann)
+    return soc
 
 
-def classify(image_path: str) -> None:
-    processed = load_process_shape_image(image_path, target_size=hp.image_size, save=False)[0]
-    X = torch.tensor(processed, dtype=torch.float32).unsqueeze(0)
-    ip = RedundantNeuralIP()
-    for ann_id in range(3):
-        ip.create_ann(ann_id)
-    ip.load_all("weights")
-    pred, prob = ip.majority_vote(X)
-    letter = INV_LETTER_MAP.get(pred, "Unknown")
-    conf = float(prob.max())
-    print(f"Prediction: {letter} (confidence {conf:.3f})")
+def train_mode():
+    soc = build_soc_with_anns()
+    # Dummy dataset for demonstration (random data)
+    X = np.random.rand(100, hp.IMAGE_SIZE).astype(np.float32)
+    y = np.random.randint(0, hp.NUM_CLASSES, size=100)
+    for ann_id in soc.neural_ip.ann_map:
+        soc.neural_ip.train_ann(ann_id, X, y, epochs=hp.EPOCHS, lr=hp.LEARNING_RATE, batch_size=hp.BATCH_SIZE)
+    print("Training complete")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="SynapseX refactored")
-    sub = parser.add_subparsers(dest="cmd")
-    sub.add_parser("train", help="train the models")
-    classify_p = sub.add_parser("classify", help="classify an image")
-    classify_p.add_argument("image", help="path to image")
-    args = parser.parse_args()
+def classify_mode():
+    soc = build_soc_with_anns()
+    # Normally we would load trained weights; for demo we use untrained models
+    sample = np.random.rand(1, hp.IMAGE_SIZE).astype(np.float32)
+    majority, preds = soc.neural_ip.predict_majority(sample, mc_passes=hp.MC_PASSES)
+    print(f"Predicted class {majority} from votes {preds}")
 
-    if args.cmd == "train":
-        train()
-    elif args.cmd == "classify":
-        classify(args.image)
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: python SynapseX.py [train|classify]")
+        return
+    mode = sys.argv[1].lower()
+    if mode == "train":
+        train_mode()
+    elif mode == "classify":
+        classify_mode()
     else:
-        parser.print_help()
-
+        print(f"Unknown mode {mode}")
 
 if __name__ == "__main__":
     main()
