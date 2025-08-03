@@ -114,8 +114,8 @@ class RedundantNeuralIP:
                     processed = load_process_shape_image(
                         str(img_path), out_dir=Path(self.train_data_dir) / "processed"
                     )
-                    X_list.append(processed[0])
-                    y_list.append(letter2label[letter])
+                    X_list.extend(processed)
+                    y_list.extend([letter2label[letter]] * len(processed))
                 if not X_list:
                     print("No training images found; aborting training.")
                     return
