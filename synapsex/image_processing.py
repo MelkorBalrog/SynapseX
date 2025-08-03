@@ -135,20 +135,9 @@ def load_process_shape_image(
         )
         arr = np.array(rotated, dtype=np.float32)
         edges = canny_edge_detection(arr, canny_low, canny_high)
-        edges[0, :] = 0
-        edges[-1, :] = 0
-        edges[:, 0] = 0
-        edges[:, -1] = 0
         dilated = morph_dilate(edges, 3, dilation_iter)
-        coords = np.argwhere(dilated > 0)
-        if coords.size:
-            y0, x0 = coords.min(axis=0)
-            y1, x1 = coords.max(axis=0) + 1
-            dilated = dilated[y0:y1, x0:x1]
         norm_img = np.array(
-            Image.fromarray(dilated.astype(np.uint8)).resize(
-                (target_size, target_size), resample=resample_lanczos
-            ),
+            Image.fromarray(dilated.astype(np.uint8)).resize((target_size, target_size), resample=resample_lanczos),
             dtype=np.float32,
         ) / 255.0
         if save:
