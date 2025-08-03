@@ -21,7 +21,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, ttk
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from PIL import Image, ImageTk
 import matplotlib.pyplot as plt
 
 try:  # Python <=3.10 ships scrolledtext as a submodule
@@ -49,6 +49,8 @@ class SynapseXGUI(tk.Tk):
         style = ttk.Style(self)
         style.theme_use("clam")
         self._build_ui()
+        # keep references to PhotoImage objects to avoid garbage collection
+        self._figure_images: list[ImageTk.PhotoImage] = []
 
     def _build_ui(self) -> None:
         paned = ttk.Panedwindow(self, orient=tk.HORIZONTAL)
@@ -132,7 +134,7 @@ class SynapseXGUI(tk.Tk):
             return
         asm_path = Path(sel[0])
         train_dir = self.data_entry.get() or None
-        soc = SoC(train_data_dir=train_dir, collect_figures=True)
+        soc = SoC(train_data_dir=train_dir, show_plots=False)
         asm_lines = load_asm_file(asm_path)
         soc.load_assembly(asm_lines)
         buf = io.StringIO()
@@ -151,6 +153,19 @@ class SynapseXGUI(tk.Tk):
         sub_nb.add(text, text=f"Run {len(sub_nb.tabs())+1}")
         sub_nb.select(text)
         self.results_nb.select(sub_nb)
+
+        # add generated figures as notebook tabs
+        for fig in soc.neural_ip.last_figures:
+            buf_img = io.BytesIO()
+            fig.savefig(buf_img, format="png")
+            buf_img.seek(0)
+            image = Image.open(buf_img)
+            photo = ImageTk.PhotoImage(image)
+            lbl = ttk.Label(self.results_nb, image=photo)
+            lbl.image = photo
+            self._figure_images.append(photo)
+            self.results_nb.add(lbl, text=f"Fig {len(self.results_nb.tabs())}")
+            plt.close(fig)
 
 
 def main() -> None:

@@ -32,8 +32,14 @@ class VirtualANN(nn.Module):
         return self.net(x)
 
     def train_model(self, X: np.ndarray, y: np.ndarray, epochs: int, lr: float, batch_size: int):
-        """Train the ANN and display live training metrics."""
+        """Train the ANN and return matplotlib figures.
 
+        The original implementation popped up matplotlib windows via
+        ``plt.show``.  For GUI integration we instead return the figure
+        objects so callers can decide how to present them (e.g. embed in
+        a notebook tab).  When used in non-GUI contexts the caller may
+        simply call ``fig.show()`` on the returned figures.
+        """
         dataset = TensorDataset(torch.from_numpy(X).float(), torch.from_numpy(y).long())
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
         criterion = nn.CrossEntropyLoss()
@@ -79,9 +85,19 @@ class VirtualANN(nn.Module):
             rec_hist.append(float(np.mean(recs)))
             f1_hist.append(float(np.mean(f1s)))
         preds_full = self.predict(X)
-        self.visualize_training(loss_hist, acc_hist, prec_hist, rec_hist, f1_hist)
-        self.visualize_weights()
-        self.visualize_confusion_matrix(y, preds_full, num_classes)
+
+        figs = []
+        fig = self.visualize_training(loss_hist, acc_hist)
+        if fig is not None:
+            figs.append(fig)
+        fig = self.visualize_weights()
+        if fig is not None:
+            figs.append(fig)
+        fig = self.visualize_confusion_matrix(y, preds_full, self.layer_sizes[-1])
+        if fig is not None:
+            figs.append(fig)
+
+        return figs
 
     def predict(self, X: np.ndarray):
         self.eval()
@@ -121,7 +137,7 @@ class VirtualANN(nn.Module):
         ax2.tick_params(axis="y")
         ax2.legend(loc="lower right")
         fig.tight_layout()
-        ax1.set_title("Training Progress")
+        plt.title("Training Progress")
         return fig
 
     def visualize_weights(self):
@@ -147,7 +163,6 @@ class VirtualANN(nn.Module):
         ax.imshow(img, cmap="seismic")
         ax.set_title("First Layer Avg Weights")
         ax.axis("off")
-        fig.tight_layout()
         return fig
 
     def visualize_confusion_matrix(self, y_true, y_pred, num_classes):
@@ -166,7 +181,7 @@ class VirtualANN(nn.Module):
         for i in range(num_classes):
             for j in range(num_classes):
                 ax.text(j, i, cm[i, j], ha="center", va="center", color="black")
-        fig.tight_layout()
+        plt.tight_layout()
         return fig
 
     # Persistence helpers -------------------------------------------------
