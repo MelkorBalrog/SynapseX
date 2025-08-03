@@ -175,9 +175,8 @@ class SynapseXGUI(tk.Tk):
         )
         if not path:
             return
-        processed = load_process_shape_image(
-            path, out_dir=Path(path).parent / "processed"
-        )[0]
+        processed_dir = Path.cwd() / "processed"
+        processed = load_process_shape_image(path, out_dir=processed_dir)[0]
         soc = SoC()
         base_addr = 0x5000
         for i, val in enumerate(processed):
