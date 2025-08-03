@@ -15,6 +15,7 @@ Usage::
 from __future__ import annotations
 import io
 import sys
+import re
 from contextlib import redirect_stdout
 from pathlib import Path
 import tkinter as tk
@@ -60,6 +61,7 @@ class SynapseXGUI(tk.Tk):
 
         self.asm_text = ScrolledText(left_paned, wrap="none", font=("Consolas", 11))
         self.asm_text.tag_configure("instr", foreground="#0066CC")
+        self.asm_text.tag_configure("number", foreground="#CC0000")
         left_paned.add(self.asm_text, weight=3)
 
         self.results_nb = ttk.Notebook(left_paned)
@@ -99,12 +101,16 @@ class SynapseXGUI(tk.Tk):
             lines = f.readlines()
         self.asm_text.delete("1.0", tk.END)
         for line in lines:
-            start = self.asm_text.index(tk.END)
+            line_start = self.asm_text.index(tk.END)
             self.asm_text.insert(tk.END, line)
-            tokens = line.strip().split()
-            if tokens:
-                end = f"{start}+{len(tokens[0])}c"
-                self.asm_text.tag_add("instr", start, end)
+            for i, match in enumerate(re.finditer(r"\S+", line)):
+                token = match.group(0).strip(",")
+                token_start = f"{line_start}+{match.start()}c"
+                token_end = f"{line_start}+{match.end()}c"
+                if i == 0:
+                    self.asm_text.tag_add("instr", token_start, token_end)
+                elif re.fullmatch(r"-?(0x[0-9a-fA-F]+|\d+)", token):
+                    self.asm_text.tag_add("number", token_start, token_end)
 
     def run_selected(self) -> None:
         sel = self.asm_tree.selection()
