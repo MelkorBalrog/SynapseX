@@ -8,12 +8,12 @@ from .models.redundant_ip import RedundantNeuralIP
 
 
 class SoC:
-    def __init__(self, train_data_dir: str | None = None):
+    def __init__(self, train_data_dir: str | None = None, show_plots: bool = True):
         self.memory = WishboneMemory()
         self.pcie_bridge = PCIeBridge()
         self.mmu = MMU()
         self.video_ip = VideoProcIP()
-        self.neural_ip = RedundantNeuralIP(train_data_dir=train_data_dir)
+        self.neural_ip = RedundantNeuralIP(train_data_dir=train_data_dir, show_plots=show_plots)
         self.cpu = CPU("CPU1", self.video_ip, self.neural_ip, self.memory, self.mmu)
         self.asm_program = []
         self.label_map = {}

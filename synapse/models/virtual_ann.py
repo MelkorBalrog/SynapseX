@@ -32,7 +32,14 @@ class VirtualANN(nn.Module):
         return self.net(x)
 
     def train_model(self, X: np.ndarray, y: np.ndarray, epochs: int, lr: float, batch_size: int):
-        """Train the ANN and display live loss/accuracy plots."""
+        """Train the ANN and return matplotlib figures.
+
+        The original implementation popped up matplotlib windows via
+        ``plt.show``.  For GUI integration we instead return the figure
+        objects so callers can decide how to present them (e.g. embed in
+        a notebook tab).  When used in non-GUI contexts the caller may
+        simply call ``fig.show()`` on the returned figures.
+        """
         dataset = TensorDataset(torch.from_numpy(X).float(), torch.from_numpy(y).long())
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
         criterion = nn.CrossEntropyLoss()
@@ -55,9 +62,19 @@ class VirtualANN(nn.Module):
             loss_hist.append(epoch_loss / total)
             acc_hist.append(correct / total if total else 0)
         preds_full = self.predict(X)
-        self.visualize_training(loss_hist, acc_hist)
-        self.visualize_weights()
-        self.visualize_confusion_matrix(y, preds_full, self.layer_sizes[-1])
+
+        figs = []
+        fig = self.visualize_training(loss_hist, acc_hist)
+        if fig is not None:
+            figs.append(fig)
+        fig = self.visualize_weights()
+        if fig is not None:
+            figs.append(fig)
+        fig = self.visualize_confusion_matrix(y, preds_full, self.layer_sizes[-1])
+        if fig is not None:
+            figs.append(fig)
+
+        return figs
 
     def predict(self, X: np.ndarray):
         self.eval()
@@ -81,7 +98,7 @@ class VirtualANN(nn.Module):
     def visualize_training(self, loss_hist, acc_hist):
         """Plot loss and accuracy curves."""
         if not loss_hist:
-            return
+            return None
         epochs = range(1, len(loss_hist) + 1)
         fig, ax1 = plt.subplots()
         ax1.set_xlabel("Epoch")
@@ -94,7 +111,7 @@ class VirtualANN(nn.Module):
         ax2.tick_params(axis="y", labelcolor="tab:blue")
         fig.tight_layout()
         plt.title("Training Progress")
-        plt.show()
+        return fig
 
     def visualize_weights(self):
         """Visualise the first layer weights as an image."""
@@ -104,7 +121,7 @@ class VirtualANN(nn.Module):
                 first_layer = mod
                 break
         if first_layer is None:
-            return
+            return None
         with torch.no_grad():
             weights = first_layer.weight.cpu().numpy()
         avg_w = weights.mean(axis=0)
@@ -115,10 +132,11 @@ class VirtualANN(nn.Module):
             pad[: avg_w.size] = avg_w
             avg_w = pad
         img = avg_w.reshape(side, side)
-        plt.imshow(img, cmap="seismic")
-        plt.title("First Layer Avg Weights")
-        plt.axis("off")
-        plt.show()
+        fig, ax = plt.subplots()
+        ax.imshow(img, cmap="seismic")
+        ax.set_title("First Layer Avg Weights")
+        ax.axis("off")
+        return fig
 
     def visualize_confusion_matrix(self, y_true, y_pred, num_classes):
         cm = np.zeros((num_classes, num_classes), dtype=int)
@@ -137,7 +155,7 @@ class VirtualANN(nn.Module):
             for j in range(num_classes):
                 ax.text(j, i, cm[i, j], ha="center", va="center", color="black")
         plt.tight_layout()
-        plt.show()
+        return fig
 
     # Persistence helpers -------------------------------------------------
     def save(self, path: str):
