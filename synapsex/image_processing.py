@@ -123,9 +123,16 @@ def load_process_shape_image(
         resample_lanczos = Image.LANCZOS
 
     pil_img = Image.open(path).convert("L")
+    # Rotate around the background color to avoid introducing spurious edges
+    # when the canvas is expanded. Without specifying ``fillcolor`` the newly
+    # exposed corners are filled with black which the edge detector interprets
+    # as strong gradients, resulting in thick square artefacts after rotation.
+    bg_color = pil_img.getpixel((0, 0))
     processed_images = []
     for angle in range(0, 181, 10):
-        rotated = pil_img.rotate(angle, resample=resample_bicubic, expand=True)
+        rotated = pil_img.rotate(
+            angle, resample=resample_bicubic, expand=True, fillcolor=bg_color
+        )
         arr = np.array(rotated, dtype=np.float32)
         edges = canny_edge_detection(arr, canny_low, canny_high)
         edges[0, :] = 0
