@@ -1,80 +1,161 @@
-"""Main entry point for the refactored SynapseX project."""
+#!/usr/bin/env python3
+"""Utility to run SynapseX assembly programs or launch a small GUI.
+
+This script supersedes the legacy ``chip.py`` entry point. Assembly programs
+are stored in the ``asm/`` directory and can be executed either via the
+command line or through a graphical interface.
+
+Usage::
+
+    python SynapseX.py gui
+    python SynapseX.py train /path/to/train_data
+    python SynapseX.py classify path/to/image.png
+"""
+
+from __future__ import annotations
+
+import io
 import sys
-import os
-import numpy as np
-from config import hyperparameters as hp
+from contextlib import redirect_stdout
+from pathlib import Path
+import tkinter as tk
+from tkinter import filedialog, ttk
+from tkinter.scrolledtext import ScrolledText
+
 from synapse.soc import SoC
-from synapse.models.virtual_ann import PyTorchANN
-from synapse.utils.image_processing import load_and_preprocess
 
 
-def build_soc_with_anns():
-    soc = SoC()
-    # Create a few transformer-based ANNs using the hyperparameters
-    for ann_id in range(3):
-        ann = PyTorchANN(hp.IMAGE_SIZE, num_classes=hp.NUM_CLASSES, dropout=hp.DROPOUT)
-        soc.neural_ip.add_ann(ann_id, ann)
-    return soc
+def load_asm_file(path: str | Path) -> list[str]:
+    """Read an assembly file and return a list of lines."""
+    with open(path, "r", encoding="utf-8") as f:
+        return [line.rstrip("\n") for line in f]
 
 
-def _load_training_data():
-    class_map = {"A": 0, "B": 1, "C": 2}
-    X_list, y_list = [], []
-    if not os.path.isdir(hp.TRAIN_DATA_DIR):
-        raise FileNotFoundError(f"Training data folder '{hp.TRAIN_DATA_DIR}' not found")
-    for fn in os.listdir(hp.TRAIN_DATA_DIR):
-        if fn.lower().endswith((".png", ".jpg", ".jpeg")):
-            label = fn.split("_")[0].upper()
-            if label in class_map:
-                path = os.path.join(hp.TRAIN_DATA_DIR, fn)
-                X_list.append(load_and_preprocess(path, hp.IMAGE_SIDE))
-                y_list.append(class_map[label])
-    if not X_list:
-        raise RuntimeError("No training images found in train_data")
-    return np.array(X_list, dtype=np.float32), np.array(y_list, dtype=int)
+class SynapseXGUI(tk.Tk):
+    """GUI to run assembly programs on the SoC."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.title("SynapseX")
+        self.geometry("1100x650")
+        style = ttk.Style(self)
+        style.theme_use("clam")
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        paned = ttk.Panedwindow(self, orient=tk.HORIZONTAL)
+        paned.pack(fill=tk.BOTH, expand=1)
+
+        left = ttk.Frame(paned)
+        right = ttk.Frame(paned, width=240)
+        paned.add(left, weight=3)
+        paned.add(right, weight=1)
+
+        left_paned = ttk.Panedwindow(left, orient=tk.VERTICAL)
+        left_paned.pack(fill=tk.BOTH, expand=1)
+
+        self.asm_text = ScrolledText(left_paned, wrap="none", font=("Consolas", 11))
+        self.asm_text.tag_configure("instr", foreground="#0066CC")
+        left_paned.add(self.asm_text, weight=3)
+
+        self.results_nb = ttk.Notebook(left_paned)
+        left_paned.add(self.results_nb, weight=2)
+
+        ttk.Label(right, text="Assembly Programs").pack(anchor="w", padx=5, pady=(5, 0))
+        self.asm_tree = ttk.Treeview(right, show="tree")
+        self.asm_tree.pack(fill=tk.BOTH, expand=1, padx=5)
+        self.asm_tree.bind("<<TreeviewSelect>>", self.on_select_asm)
+
+        ttk.Separator(right, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5)
+
+        run_btn = ttk.Button(right, text="Run Program", command=self.run_selected)
+        run_btn.pack(fill=tk.X, padx=5)
+
+        ttk.Label(right, text="Training Data").pack(anchor="w", padx=5, pady=(10, 0))
+        self.data_entry = ttk.Entry(right)
+        self.data_entry.pack(fill=tk.X, padx=5)
+        browse = ttk.Button(right, text="Browse…", command=self.choose_data_dir)
+        browse.pack(fill=tk.X, padx=5, pady=5)
+
+        for asm_path in sorted(Path("asm").glob("*.asm")):
+            self.asm_tree.insert("", tk.END, iid=str(asm_path), text=asm_path.name)
+
+    def choose_data_dir(self) -> None:
+        path = filedialog.askdirectory(title="Select Training Data Directory")
+        if path:
+            self.data_entry.delete(0, tk.END)
+            self.data_entry.insert(0, path)
+
+    def on_select_asm(self, _event) -> None:
+        sel = self.asm_tree.selection()
+        if not sel:
+            return
+        path = sel[0]
+        with open(path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        self.asm_text.delete("1.0", tk.END)
+        for line in lines:
+            start = self.asm_text.index(tk.END)
+            self.asm_text.insert(tk.END, line)
+            tokens = line.strip().split()
+            if tokens:
+                end = f"{start}+{len(tokens[0])}c"
+                self.asm_text.tag_add("instr", start, end)
+
+    def run_selected(self) -> None:
+        sel = self.asm_tree.selection()
+        if not sel:
+            return
+        asm_path = Path(sel[0])
+        train_dir = self.data_entry.get() or None
+        soc = SoC(train_data_dir=train_dir)
+        asm_lines = load_asm_file(asm_path)
+        soc.load_assembly(asm_lines)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            soc.run(max_steps=3000)
+        out = buf.getvalue()
+        text = ScrolledText(self.results_nb, wrap="word", font=("Segoe UI", 10))
+        text.insert(tk.END, out)
+        text.config(state="disabled")
+        self.results_nb.add(text, text=f"Run {len(self.results_nb.tabs())+1}")
+        self.results_nb.select(text)
 
 
-def train_mode():
-    soc = build_soc_with_anns()
-    X, y = _load_training_data()
-    os.makedirs(hp.WEIGHTS_DIR, exist_ok=True)
-    for ann_id, ann in soc.neural_ip.ann_map.items():
-        soc.neural_ip.train_ann(ann_id, X, y, epochs=hp.EPOCHS, lr=hp.LEARNING_RATE, batch_size=hp.BATCH_SIZE)
-        weight_path = os.path.join(hp.WEIGHTS_DIR, f"ann{ann_id}.pt")
-        ann.save(weight_path)
-    print("Training complete")
-
-
-def classify_mode(img_path: str):
-    if not os.path.exists(img_path):
-        raise FileNotFoundError(f"Image '{img_path}' not found")
-    soc = build_soc_with_anns()
-    for ann_id, ann in soc.neural_ip.ann_map.items():
-        weight_path = os.path.join(hp.WEIGHTS_DIR, f"ann{ann_id}.pt")
-        if os.path.exists(weight_path):
-            ann.load(weight_path)
-        else:
-            print(f"Warning: weights for ANN{ann_id} not found; using untrained model")
-    sample = load_and_preprocess(img_path, hp.IMAGE_SIDE).reshape(1, -1)
-    majority, preds = soc.neural_ip.predict_majority(sample, mc_passes=hp.MC_PASSES)
-    print(f"Predicted class {majority} from votes {preds}")
-
-
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python SynapseX.py [train|classify]")
+def main() -> None:
+    if len(sys.argv) == 1 or sys.argv[1].lower() == "gui":
+        gui = SynapseXGUI()
+        gui.mainloop()
         return
+
     mode = sys.argv[1].lower()
+
     if mode == "train":
-        train_mode()
+        if len(sys.argv) < 3:
+            print("Usage: python SynapseX.py train /path/to/train_data")
+            return
+        train_dir = Path(sys.argv[2])
+        if not train_dir.is_dir():
+            print(f"Training data directory '{train_dir}' not found.")
+            return
+        soc = SoC(train_data_dir=str(train_dir))
+        asm_lines = load_asm_file(Path("asm") / "training.asm")
+        soc.load_assembly(asm_lines)
+        soc.run(max_steps=3000)
+        print("\nTraining Phase Completed!")
     elif mode == "classify":
         if len(sys.argv) < 3:
             print("Usage: python SynapseX.py classify path/to/image.png")
             return
-        classify_mode(sys.argv[2])
+        soc = SoC()
+        asm_lines = load_asm_file(Path("asm") / "classification.asm")
+        soc.load_assembly(asm_lines)
+        soc.run(max_steps=3000)
+        print("\nClassification Phase Completed!")
     else:
-        print(f"Unknown mode {mode}")
+        print("Unknown mode. Use 'train', 'classify' or 'gui'.")
 
 
 if __name__ == "__main__":
     main()
+
