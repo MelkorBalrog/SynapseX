@@ -8,6 +8,7 @@ neural network work to :class:`VirtualANN` instances.
 
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import Path
 from typing import Dict, List
 
@@ -163,37 +164,10 @@ class RedundantNeuralIP:
     # Utility
     # ------------------------------------------------------------------
     def predict_majority(self, X: np.ndarray):
-        """Bayesian majority vote across all configured ANNs.
-
-        ``VirtualANN.predict`` only returns the most likely class.  For a
-        Bayesian combination we require the full probability distribution of
-        each model which is provided by :meth:`VirtualANN.predict_proba`.
-
-        Parameters
-        ----------
-        X: np.ndarray
-            Input sample(s) shaped as ``(batch, features)``.
-
-        Returns
-        -------
-        Tuple[int, Dict[int, np.ndarray]]
-            The winning class index and the per-ANN probability distributions
-            for the first sample.
-        """
-
-        prob_map: Dict[int, np.ndarray] = {}
+        preds = {}
         for ann_id, ann in self.ann_map.items():
-            prob_map[ann_id] = ann.predict_proba(X)[0]
-
-        if not prob_map:
-            raise ValueError("No ANNs configured for voting")
-
-        # Compute posterior probability by multiplying model probabilities in
-        # log-space for numerical stability.
-        log_probs = np.log(np.stack(list(prob_map.values())) + 1e-9)
-        log_post = log_probs.sum(axis=0)
-        post = np.exp(log_post)
-        post /= post.sum()
-        majority = int(np.argmax(post))
-        return majority, prob_map
+            preds[ann_id] = ann.predict(X)
+        votes = [preds[ann_id][0] for ann_id in self.ann_map]
+        majority = Counter(votes).most_common(1)[0][0]
+        return majority, preds
 
