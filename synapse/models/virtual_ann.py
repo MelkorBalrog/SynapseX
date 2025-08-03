@@ -150,46 +150,23 @@ class VirtualANN(nn.Module):
         return fig
 
     def visualize_weights(self):
-        """Visualise the weights of all linear layers.
-
-        Each linear layer of the network is displayed as a small heatmap where
-        every square corresponds to a neuron in that layer.  The numeric value
-        shown in each square is the mean of the neuron's incoming weights.  All
-        layers are placed into a single figure so that the caller can present
-        them on the same tab in the GUI.
-        """
-
-        layers = [mod for mod in self.net if isinstance(mod, nn.Linear)]
-        if not layers:
+        """Visualise all linear layer weights."""
+        linears = [mod for mod in self.net if isinstance(mod, nn.Linear)]
+        if not linears:
             return None
 
-        n_layers = len(layers)
-        cols = min(4, n_layers)
-        rows = int(np.ceil(n_layers / cols))
-        fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows))
-        axes = np.atleast_1d(axes).flatten()
+        cols = len(linears)
+        fig, axes = plt.subplots(1, cols, figsize=(4 * cols, 4))
+        if cols == 1:
+            axes = [axes]
 
-        for idx, (layer, ax) in enumerate(zip(layers, axes)):
+        for idx, (layer, ax) in enumerate(zip(linears, axes)):
             with torch.no_grad():
                 weights = layer.weight.cpu().numpy()
-            # compute a single representative value per neuron
-            means = weights.mean(axis=1)
-            side = int(np.ceil(np.sqrt(means.size)))
-            grid = np.full(side * side, np.nan)
-            grid[: means.size] = means
-            grid = grid.reshape(side, side)
-            im = ax.imshow(grid, cmap="seismic")
+            ax.imshow(weights, cmap="seismic")
             ax.set_title(f"Layer {idx + 1} Weights")
-            ax.axis("off")
-            for i in range(side):
-                for j in range(side):
-                    cell_idx = i * side + j
-                    if cell_idx < means.size:
-                        ax.text(j, i, f"{grid[i, j]:.2f}", ha="center", va="center", color="black")
-
-        # hide any unused axes
-        for ax in axes[n_layers:]:
-            ax.axis("off")
+            ax.set_xticks([])
+            ax.set_yticks([])
 
         fig.tight_layout()
         return fig
