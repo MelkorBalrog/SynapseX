@@ -12,7 +12,6 @@ def load_and_preprocess(path: str, target_size: int) -> np.ndarray:
     arr = np.array(img, dtype=np.float32) / 255.0
     return arr.flatten()
 
-
 def gaussian_kernel(size=5, sigma=1.4):
     ax = np.linspace(-(size - 1) // 2, (size - 1) // 2, size)
     xx, yy = np.meshgrid(ax, ax)
