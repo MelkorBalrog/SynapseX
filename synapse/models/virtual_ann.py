@@ -150,28 +150,25 @@ class VirtualANN(nn.Module):
         return fig
 
     def visualize_weights(self):
-        """Visualise the first layer weights as an image."""
-        first_layer = None
-        for mod in self.net:
-            if isinstance(mod, nn.Linear):
-                first_layer = mod
-                break
-        if first_layer is None:
+        """Visualise all linear layer weights."""
+        linears = [mod for mod in self.net if isinstance(mod, nn.Linear)]
+        if not linears:
             return None
-        with torch.no_grad():
-            weights = first_layer.weight.cpu().numpy()
-        avg_w = weights.mean(axis=0)
-        side = int(np.sqrt(avg_w.size))
-        if side * side != avg_w.size:
-            # pad to square for display
-            pad = np.zeros(side * side)
-            pad[: avg_w.size] = avg_w
-            avg_w = pad
-        img = avg_w.reshape(side, side)
-        fig, ax = plt.subplots()
-        ax.imshow(img, cmap="seismic")
-        ax.set_title("First Layer Avg Weights")
-        ax.axis("off")
+
+        cols = len(linears)
+        fig, axes = plt.subplots(1, cols, figsize=(4 * cols, 4))
+        if cols == 1:
+            axes = [axes]
+
+        for idx, (layer, ax) in enumerate(zip(linears, axes)):
+            with torch.no_grad():
+                weights = layer.weight.cpu().numpy()
+            ax.imshow(weights, cmap="seismic")
+            ax.set_title(f"Layer {idx + 1} Weights")
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+        fig.tight_layout()
         return fig
 
     def visualize_confusion_matrix(self, y_true, y_pred):
