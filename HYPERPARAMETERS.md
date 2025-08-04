@@ -8,18 +8,9 @@ SynapseX's machine-learning components are configurable through a set of hyperpa
 |------|---------|-------------|
 | `BATCH_SIZE` | `32` | Number of samples processed in each optimisation step. |
 | `LEARNING_RATE` | `0.001` | Step size used by the Adam optimiser during training. |
-| `EPOCHS` | `10` | Minimum number of passes through the training dataset before evaluating stop criteria. |
+| `EPOCHS` | `10` | Number of passes through the training dataset. |
 | `DROPOUT_RATE` | `0.2` | Dropout probability applied to fully connected layers during training. |
 | `MC_PASSES` | `10` | Stochastic forward passes run during Monte Carlo dropout inference. |
-| `MAX_EPOCHS` | `1000` | Hard cap on training epochs to prevent infinite loops. |
-| `LR_DECAY_FACTOR` | `0.5` | Multiplicative factor applied when the learning rate is reduced. |
-| `LR_DECAY_PATIENCE` | `3` | Epochs with no F1 improvement before reducing the learning rate. |
-| `TARGET_ACCURACY` | `0.95` | Training continues until accuracy meets or exceeds this value. |
-| `TARGET_PRECISION` | `0.95` | Training continues until precision meets or exceeds this value. |
-| `TARGET_RECALL` | `0.95` | Training continues until recall meets or exceeds this value. |
-| `TARGET_F1` | `0.95` | Training continues until F1 score meets or exceeds this value. |
-| `MUTATE_PATIENCE` | `5` | Epochs without improvement before the network mutates. |
-| `MUTATION_STD` | `0.1` | Standard deviation of Gaussian noise used during mutation. |
 | `LAYER_SIZES` | `[784, 256, 256, 3]` | Example dense network architecture listing neurons per layer. |
 | `IMAGE_SIDE` | `28` | Height and width (in pixels) of input images. |
 | `IMAGE_SIZE` | `784` | Flattened input dimension derived from `IMAGE_SIDE`. |
@@ -39,15 +30,6 @@ The `HyperParameters` dataclass exposes similar knobs for runtime configuration.
 | `image_size` | `28` | Side length of square input images provided to the Transformer classifier. |
 | `dropout` | `0.2` | Dropout probability applied to model layers. |
 | `learning_rate` | `1e-3` | Optimiser step size during training. |
-| `epochs` | `10` | Minimum number of training epochs before evaluating stop criteria. |
-| `max_epochs` | `1000` | Maximum number of epochs to run before halting regardless of metrics. |
+| `epochs` | `10` | Number of training epochs. |
 | `batch_size` | `32` | Mini-batch size for the `DataLoader`. |
 | `mc_dropout_passes` | `10` | Number of forward passes to average when using Monte Carlo dropout. |
-| `target_accuracy` | `0.95` | Training halts once accuracy meets or exceeds this value. |
-| `target_precision` | `0.95` | Training halts once precision meets or exceeds this value. |
-| `target_recall` | `0.95` | Training halts once recall meets or exceeds this value. |
-| `target_f1` | `0.95` | Training halts once F1 score meets or exceeds this value. |
-| `mutate_patience` | `5` | Epochs without improvement before a mutation is attempted. |
-| `mutation_std` | `0.1` | Magnitude of random weight perturbations during mutation. |
-| `lr_decay_factor` | `0.5` | Factor to reduce the learning rate when progress stalls. |
-| `lr_decay_patience` | `3` | Epochs without F1 improvement before reducing the learning rate. |

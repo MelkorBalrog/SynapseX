@@ -7,49 +7,31 @@ windows to pop up showing the training curves.
 """
 
 from typing import List
-import random
 import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 import matplotlib.pyplot as plt
 
-from config import hyperparameters as hp
-
 
 class VirtualANN(nn.Module):
     def __init__(self, layer_sizes: List[int], dropout_rate: float = 0.2):
         super().__init__()
         self.layer_sizes = layer_sizes
-        self.dropout_rate = dropout_rate
-        self._build_network()
-
-    def _build_network(self) -> None:
-        layers: List[nn.Module] = []
-        for i in range(len(self.layer_sizes) - 1):
-            in_dim = self.layer_sizes[i]
-            out_dim = self.layer_sizes[i + 1]
+        layers = []
+        for i in range(len(layer_sizes) - 1):
+            in_dim = layer_sizes[i]
+            out_dim = layer_sizes[i + 1]
             layers.append(nn.Linear(in_dim, out_dim))
-            if i < len(self.layer_sizes) - 2:
+            if i < len(layer_sizes) - 2:
                 layers.append(nn.LeakyReLU())
-                layers.append(nn.Dropout(self.dropout_rate))
+                layers.append(nn.Dropout(dropout_rate))
         self.net = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.net(x)
 
-    def train_model(
-        self,
-        X: np.ndarray,
-        y: np.ndarray,
-        epochs: int,
-        lr: float,
-        batch_size: int,
-        min_accuracy: float = hp.TARGET_ACCURACY,
-        min_precision: float = hp.TARGET_PRECISION,
-        min_recall: float = hp.TARGET_RECALL,
-        min_f1: float = hp.TARGET_F1,
-    ):
+    def train_model(self, X: np.ndarray, y: np.ndarray, epochs: int, lr: float, batch_size: int):
         """Train the ANN and return matplotlib figures.
 
         The original implementation popped up matplotlib windows via
@@ -65,11 +47,7 @@ class VirtualANN(nn.Module):
         loss_hist, acc_hist, prec_hist, rec_hist, f1_hist = [], [], [], [], []
         num_classes = self.layer_sizes[-1]
         self.train()
-        epoch = 0
-        best_f1 = 0.0
-        stagnant = 0
-        while True:
-            epoch += 1
+        for _ in range(epochs):
             epoch_loss = 0.0
             correct = 0
             total = 0
@@ -88,8 +66,7 @@ class VirtualANN(nn.Module):
                 all_preds.extend(pred_labels.cpu().numpy().tolist())
                 all_true.extend(yb.cpu().numpy().tolist())
             loss_hist.append(epoch_loss / total)
-            acc = correct / total if total else 0.0
-            acc_hist.append(acc)
+            acc_hist.append(correct / total if total else 0)
             cm = np.zeros((num_classes, num_classes), dtype=int)
             for t, p in zip(all_true, all_preds):
                 cm[t, p] += 1
@@ -104,31 +81,9 @@ class VirtualANN(nn.Module):
                 precs.append(prec)
                 recs.append(rec)
                 f1s.append(f1)
-            prec = float(np.mean(precs))
-            rec = float(np.mean(recs))
-            f1_val = float(np.mean(f1s))
-            prec_hist.append(prec)
-            rec_hist.append(rec)
-            f1_hist.append(f1_val)
-
-            if f1_val > best_f1:
-                best_f1 = f1_val
-                stagnant = 0
-            else:
-                stagnant += 1
-                if stagnant >= hp.MUTATE_PATIENCE:
-                    self.mutate()
-                    optimizer = torch.optim.Adam(self.parameters(), lr=lr)
-                    stagnant = 0
-
-            if (
-                epoch >= epochs
-                and acc >= min_accuracy
-                and prec >= min_precision
-                and rec >= min_recall
-                and f1_val >= min_f1
-            ):
-                break
+            prec_hist.append(float(np.mean(precs)))
+            rec_hist.append(float(np.mean(recs)))
+            f1_hist.append(float(np.mean(f1s)))
         preds_full = self.predict(X)
 
         figs = []
@@ -248,38 +203,10 @@ class VirtualANN(nn.Module):
 
     # Persistence helpers -------------------------------------------------
     def save(self, path: str):
-        torch.save(
-            {
-                "state_dict": self.state_dict(),
-                "layer_sizes": self.layer_sizes,
-                "dropout": self.dropout_rate,
-            },
-            path,
-        )
+        torch.save(self.state_dict(), path)
 
     def load(self, path: str):
-        data = torch.load(path)
-        if isinstance(data, dict):
-            self.layer_sizes = data.get("layer_sizes", self.layer_sizes)
-            self.dropout_rate = data.get("dropout", self.dropout_rate)
-            self._build_network()
-            self.load_state_dict(data["state_dict"], strict=False)
-        else:
-            self.load_state_dict(data)
-
-    def mutate(self) -> None:
-        """Randomly alter network structure and weights."""
-        if len(self.layer_sizes) > 2 and random.random() < 0.5:
-            idx = random.randint(1, len(self.layer_sizes) - 2)
-            change = max(1, int(self.layer_sizes[idx] * 0.1))
-            self.layer_sizes[idx] = max(1, self.layer_sizes[idx] + random.choice([-change, change]))
-        else:
-            new_units = max(1, int(self.layer_sizes[-2] * 0.5))
-            self.layer_sizes.insert(-1, new_units)
-        self._build_network()
-        with torch.no_grad():
-            for p in self.parameters():
-                p.add_(torch.randn_like(p) * hp.MUTATION_STD)
+        self.load_state_dict(torch.load(path))
 
 
 class TransformerClassifier(nn.Module):
@@ -307,83 +234,19 @@ class PyTorchANN:
     def __init__(self, input_dim: int, num_classes: int, dropout: float = 0.1, nhead: int = 4):
         self.model = TransformerClassifier(input_dim, num_classes, dropout, nhead)
 
-    def train_model(
-        self,
-        X: np.ndarray,
-        y: np.ndarray,
-        epochs: int,
-        lr: float,
-        batch_size: int,
-        min_accuracy: float = hp.TARGET_ACCURACY,
-        min_precision: float = hp.TARGET_PRECISION,
-        min_recall: float = hp.TARGET_RECALL,
-        min_f1: float = hp.TARGET_F1,
-    ):
+    def train_model(self, X: np.ndarray, y: np.ndarray, epochs: int, lr: float, batch_size: int):
         dataset = TensorDataset(torch.from_numpy(X).float(), torch.from_numpy(y).long())
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
-        num_classes = self.model.classifier.out_features
         self.model.train()
-        epoch = 0
-        best_f1 = 0.0
-        stagnant = 0
-        while True:
-            epoch += 1
-            epoch_loss = 0.0
-            correct = 0
-            total = 0
-            all_preds: list[int] = []
-            all_true: list[int] = []
+        for _ in range(epochs):
             for xb, yb in loader:
                 optimizer.zero_grad()
                 preds = self.model(xb)
                 loss = criterion(preds, yb)
                 loss.backward()
                 optimizer.step()
-                epoch_loss += loss.item() * xb.size(0)
-                pred_labels = preds.argmax(dim=1)
-                correct += (pred_labels == yb).sum().item()
-                total += xb.size(0)
-                all_preds.extend(pred_labels.cpu().numpy().tolist())
-                all_true.extend(yb.cpu().numpy().tolist())
-            acc = correct / total if total else 0.0
-            cm = np.zeros((num_classes, num_classes), dtype=int)
-            for t, p in zip(all_true, all_preds):
-                cm[t, p] += 1
-            precs, recs, f1s = [], [], []
-            for i in range(num_classes):
-                tp = cm[i, i]
-                fp = cm[:, i].sum() - tp
-                fn = cm[i, :].sum() - tp
-                prec = tp / (tp + fp) if (tp + fp) else 0.0
-                rec = tp / (tp + fn) if (tp + fn) else 0.0
-                f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
-                precs.append(prec)
-                recs.append(rec)
-                f1s.append(f1)
-            prec = float(np.mean(precs))
-            rec = float(np.mean(recs))
-            f1_val = float(np.mean(f1s))
-
-            if f1_val > best_f1:
-                best_f1 = f1_val
-                stagnant = 0
-            else:
-                stagnant += 1
-                if stagnant >= hp.MUTATE_PATIENCE:
-                    self.mutate()
-                    optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
-                    stagnant = 0
-
-            if (
-                epoch >= epochs
-                and acc >= min_accuracy
-                and prec >= min_precision
-                and rec >= min_recall
-                and f1_val >= min_f1
-            ):
-                break
 
     def predict(self, X: np.ndarray):
         self.model.eval()
@@ -402,31 +265,7 @@ class PyTorchANN:
         return mean, var
 
     def save(self, path: str):
-        cfg = {
-            "input_dim": self.model.proj.in_features,
-            "num_classes": self.model.classifier.out_features,
-            "dropout": self.model.encoder.layers[0].dropout.p,
-            "nhead": self.model.encoder.layers[0].self_attn.num_heads,
-        }
-        torch.save({"state_dict": self.model.state_dict(), "config": cfg}, path)
+        torch.save(self.model.state_dict(), path)
 
     def load(self, path: str):
-        data = torch.load(path, map_location="cpu")
-        if isinstance(data, dict) and "config" in data:
-            cfg = data["config"]
-            self.model = TransformerClassifier(
-                cfg["input_dim"], cfg["num_classes"], cfg.get("dropout", 0.1), cfg.get("nhead", 4)
-            )
-            self.model.load_state_dict(data["state_dict"], strict=False)
-        else:
-            self.model.load_state_dict(data)
-
-    def mutate(self) -> None:
-        """Perturb weights and dropout to explore new structures."""
-        with torch.no_grad():
-            for p in self.model.parameters():
-                p.add_(torch.randn_like(p) * hp.MUTATION_STD)
-        # adjust dropout of encoder layers
-        for layer in self.model.encoder.layers:
-            new_p = min(0.5, max(0.0, layer.dropout.p + random.uniform(-0.05, 0.05)))
-            layer.dropout.p = new_p
+        self.model.load_state_dict(torch.load(path))
