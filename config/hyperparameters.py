@@ -3,9 +3,15 @@
 # Training hyperparameters
 BATCH_SIZE = 32
 LEARNING_RATE = 0.001
+# Minimum number of epochs to run before considering early stopping
 EPOCHS = 10
 DROPOUT_RATE = 0.2
 MC_PASSES = 10
+# Training stops once all of these metrics meet or exceed the targets
+TARGET_ACCURACY = 0.95
+TARGET_PRECISION = 0.95
+TARGET_RECALL = 0.95
+TARGET_F1 = 0.95
 
 # Model architecture
 LAYER_SIZES = [784, 256, 256, 3]  # Example architecture for 28x28 input and 3 classes
