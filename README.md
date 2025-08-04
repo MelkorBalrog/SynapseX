@@ -54,6 +54,52 @@ networks. If the guesses agree, we are confident; if they vary widely, the model
 is unsure. This cheap trick gives us an approximation of true Bayesian
 reasoning without heavy mathematics.
 
+#### Step-by-step
+
+1. **Train with dropout** – build your model with dropout layers and train as
+   usual. Dropout randomly zeros some activations so the model does not rely on
+   any single neuron.
+2. **Keep dropout on for inference** – when you want a prediction, *do not*
+   disable dropout.
+3. **Run multiple forward passes** – feed the same input \(x\) through the
+   network \(T\) times. Each pass uses a different random dropout mask, producing
+   predictions \(f_{\theta_t}(x)\).
+4. **Aggregate the predictions** – average the outputs to get a final guess and
+   measure how far individual predictions stray from that average to estimate
+   uncertainty.
+
+```mermaid
+flowchart TD
+    X[Input x] --> P1[Pass 1\nDropout ON]
+    X --> P2[Pass 2\nDropout ON]
+    X --> PT[Pass T\nDropout ON]
+    P1 & P2 & PT --> C[Collect predictions]
+    C --> M[Mean & variance]
+    M --> Y[Prediction +\nuncertainty]
+```
+
+#### Formulas
+
+The averaged prediction and its uncertainty are computed as
+
+$$\hat{y} = \frac{1}{T} \sum_{t=1}^{T} f_{\theta_t}(x)$$
+
+$$\hat{\sigma}^2 = \frac{1}{T} \sum_{t=1}^{T} \left(f_{\theta_t}(x) - \hat{y}\right)^2$$
+
+#### Inputs
+
+- trained network with dropout layers
+- new example \(x\)
+- number of Monte Carlo passes \(T\)
+
+#### Outputs
+
+- mean prediction \(\hat{y}\)
+- uncertainty estimate \(\hat{\sigma}\)
+
+Each dropout mask acts like sampling a different set of weights, giving us a
+lightweight Bayesian approximation with just a single trained model.
+
 ### Principal ANN Topologies
 
 #### ANN0 – Transformer Classifier
