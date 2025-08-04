@@ -13,12 +13,6 @@ TARGET_PRECISION = 0.95
 TARGET_RECALL = 0.95
 TARGET_F1 = 0.95
 
-# Mutation strategy
-# Number of epochs without improvement before triggering a mutation
-MUTATE_PATIENCE = 5
-# Standard deviation of Gaussian noise added during mutation
-MUTATION_STD = 0.1
-
 # Model architecture
 LAYER_SIZES = [784, 256, 256, 3]  # Example architecture for 28x28 input and 3 classes
 
