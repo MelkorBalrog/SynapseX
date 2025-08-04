@@ -7,6 +7,7 @@ windows to pop up showing the training curves.
 """
 
 from typing import List
+import random
 import numpy as np
 import torch
 from torch import nn
@@ -20,14 +21,18 @@ class VirtualANN(nn.Module):
     def __init__(self, layer_sizes: List[int], dropout_rate: float = 0.2):
         super().__init__()
         self.layer_sizes = layer_sizes
-        layers = []
-        for i in range(len(layer_sizes) - 1):
-            in_dim = layer_sizes[i]
-            out_dim = layer_sizes[i + 1]
+        self.dropout_rate = dropout_rate
+        self._build_network()
+
+    def _build_network(self) -> None:
+        layers: List[nn.Module] = []
+        for i in range(len(self.layer_sizes) - 1):
+            in_dim = self.layer_sizes[i]
+            out_dim = self.layer_sizes[i + 1]
             layers.append(nn.Linear(in_dim, out_dim))
-            if i < len(layer_sizes) - 2:
+            if i < len(self.layer_sizes) - 2:
                 layers.append(nn.LeakyReLU())
-                layers.append(nn.Dropout(dropout_rate))
+                layers.append(nn.Dropout(self.dropout_rate))
         self.net = nn.Sequential(*layers)
 
     def forward(self, x):
@@ -61,6 +66,8 @@ class VirtualANN(nn.Module):
         num_classes = self.layer_sizes[-1]
         self.train()
         epoch = 0
+        best_f1 = 0.0
+        stagnant = 0
         while True:
             epoch += 1
             epoch_loss = 0.0
@@ -103,6 +110,17 @@ class VirtualANN(nn.Module):
             prec_hist.append(prec)
             rec_hist.append(rec)
             f1_hist.append(f1_val)
+
+            if f1_val > best_f1:
+                best_f1 = f1_val
+                stagnant = 0
+            else:
+                stagnant += 1
+                if stagnant >= hp.MUTATE_PATIENCE:
+                    self.mutate()
+                    optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+                    stagnant = 0
+
             if (
                 epoch >= epochs
                 and acc >= min_accuracy
@@ -230,10 +248,38 @@ class VirtualANN(nn.Module):
 
     # Persistence helpers -------------------------------------------------
     def save(self, path: str):
-        torch.save(self.state_dict(), path)
+        torch.save(
+            {
+                "state_dict": self.state_dict(),
+                "layer_sizes": self.layer_sizes,
+                "dropout": self.dropout_rate,
+            },
+            path,
+        )
 
     def load(self, path: str):
-        self.load_state_dict(torch.load(path))
+        data = torch.load(path)
+        if isinstance(data, dict):
+            self.layer_sizes = data.get("layer_sizes", self.layer_sizes)
+            self.dropout_rate = data.get("dropout", self.dropout_rate)
+            self._build_network()
+            self.load_state_dict(data["state_dict"], strict=False)
+        else:
+            self.load_state_dict(data)
+
+    def mutate(self) -> None:
+        """Randomly alter network structure and weights."""
+        if len(self.layer_sizes) > 2 and random.random() < 0.5:
+            idx = random.randint(1, len(self.layer_sizes) - 2)
+            change = max(1, int(self.layer_sizes[idx] * 0.1))
+            self.layer_sizes[idx] = max(1, self.layer_sizes[idx] + random.choice([-change, change]))
+        else:
+            new_units = max(1, int(self.layer_sizes[-2] * 0.5))
+            self.layer_sizes.insert(-1, new_units)
+        self._build_network()
+        with torch.no_grad():
+            for p in self.parameters():
+                p.add_(torch.randn_like(p) * hp.MUTATION_STD)
 
 
 class TransformerClassifier(nn.Module):
@@ -280,6 +326,9 @@ class PyTorchANN:
         num_classes = self.model.classifier.out_features
         self.model.train()
         epoch = 0
+        best_f1 = 0.0
+        stagnant = 0
+
         while True:
             epoch += 1
             epoch_loss = 0.0
@@ -317,6 +366,17 @@ class PyTorchANN:
             prec = float(np.mean(precs))
             rec = float(np.mean(recs))
             f1_val = float(np.mean(f1s))
+
+            if f1_val > best_f1:
+                best_f1 = f1_val
+                stagnant = 0
+            else:
+                stagnant += 1
+                if stagnant >= hp.MUTATE_PATIENCE:
+                    self.mutate()
+                    optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+                    stagnant = 0
+
             if (
                 epoch >= epochs
                 and acc >= min_accuracy
@@ -343,7 +403,31 @@ class PyTorchANN:
         return mean, var
 
     def save(self, path: str):
-        torch.save(self.model.state_dict(), path)
+        cfg = {
+            "input_dim": self.model.proj.in_features,
+            "num_classes": self.model.classifier.out_features,
+            "dropout": self.model.encoder.layers[0].dropout.p,
+            "nhead": self.model.encoder.layers[0].self_attn.num_heads,
+        }
+        torch.save({"state_dict": self.model.state_dict(), "config": cfg}, path)
 
     def load(self, path: str):
-        self.model.load_state_dict(torch.load(path))
+        data = torch.load(path, map_location="cpu")
+        if isinstance(data, dict) and "config" in data:
+            cfg = data["config"]
+            self.model = TransformerClassifier(
+                cfg["input_dim"], cfg["num_classes"], cfg.get("dropout", 0.1), cfg.get("nhead", 4)
+            )
+            self.model.load_state_dict(data["state_dict"], strict=False)
+        else:
+            self.model.load_state_dict(data)
+
+    def mutate(self) -> None:
+        """Perturb weights and dropout to explore new structures."""
+        with torch.no_grad():
+            for p in self.model.parameters():
+                p.add_(torch.randn_like(p) * hp.MUTATION_STD)
+        # adjust dropout of encoder layers
+        for layer in self.model.encoder.layers:
+            new_p = min(0.5, max(0.0, layer.dropout.p + random.uniform(-0.05, 0.05)))
+            layer.dropout.p = new_p

@@ -14,5 +14,7 @@ class HyperParameters:
     target_precision: float = 0.95
     target_recall: float = 0.95
     target_f1: float = 0.95
+    mutate_patience: int = 5
+    mutation_std: float = 0.1
 
 hp = HyperParameters()

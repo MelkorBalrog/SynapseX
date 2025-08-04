@@ -15,6 +15,8 @@ SynapseX's machine-learning components are configurable through a set of hyperpa
 | `TARGET_PRECISION` | `0.95` | Training continues until precision meets or exceeds this value. |
 | `TARGET_RECALL` | `0.95` | Training continues until recall meets or exceeds this value. |
 | `TARGET_F1` | `0.95` | Training continues until F1 score meets or exceeds this value. |
+| `MUTATE_PATIENCE` | `5` | Epochs without improvement before the network mutates. |
+| `MUTATION_STD` | `0.1` | Standard deviation of Gaussian noise used during mutation. |
 | `LAYER_SIZES` | `[784, 256, 256, 3]` | Example dense network architecture listing neurons per layer. |
 | `IMAGE_SIDE` | `28` | Height and width (in pixels) of input images. |
 | `IMAGE_SIZE` | `784` | Flattened input dimension derived from `IMAGE_SIDE`. |
@@ -41,3 +43,5 @@ The `HyperParameters` dataclass exposes similar knobs for runtime configuration.
 | `target_precision` | `0.95` | Training halts once precision meets or exceeds this value. |
 | `target_recall` | `0.95` | Training halts once recall meets or exceeds this value. |
 | `target_f1` | `0.95` | Training halts once F1 score meets or exceeds this value. |
+| `mutate_patience` | `5` | Epochs without improvement before a mutation is attempted. |
+| `mutation_std` | `0.1` | Magnitude of random weight perturbations during mutation. |
