@@ -37,7 +37,7 @@ SynapseX bundles several neural architectures and ensemble techniques:
   `COMBINED_STEP` operation.
 - **Monte Carlo dropout.** Dropout is kept active during inference and multiple
   stochastic forward passes are averaged to approximate Bayesian inference.
-- **Bayesian majority voting.** Probabilities from several ANNs are combined to
+- **Majority voting.** Predictions from several ANNs are combined to
   yield a robust final prediction.
 
 ### Principal ANN Topologies
@@ -80,11 +80,11 @@ graph TD
     S3 --> O2[3‑class Output]
 ```
 
-### Bayesian Majority Voting
+### Majority Voting
 
 ```mermaid
 graph TD
-    A0[ANN0] --> V[Bayesian\nVote]
+    A0[ANN0] --> V[Majority\nVote]
     A1[ANN1] --> V
     A2[ANN2] --> V
     V --> F[Final Class]
@@ -113,9 +113,8 @@ assembly instructions:
   with LeakyReLU activations and dropout regularisation.
 - **Transformer classifier** – images are split into patches and processed by a
   lightweight transformer encoder before classification.
-- **Bayesian ensemble voting** – multiple ANNs predict with Monte Carlo
-  dropout to approximate Bayesian inference; their probability outputs are
-  averaged for a majority decision.
+- **Ensemble voting** – multiple ANNs predict with Monte Carlo dropout; their
+  outputs are averaged for a majority decision.
 
 The example `training.asm`/`classification.asm` programs configure three
 distinct ANNs.  ANN 0 mixes dense layers with stacked transformer blocks, ANN 1
@@ -131,14 +130,14 @@ graph LR
     T3 --> L2[Linear 2352→3]
 ```
 
-Bayesian majority voting across the ensemble is depicted here:
+Majority voting across the ensemble is depicted here:
 
 ```mermaid
 graph TD
     X[Input image] --> A0[ANN 0]
     X --> A1[ANN 1]
     X --> A2[ANN 2]
-    A0 --> Vote[MC Dropout\nBayesian Vote]
+    A0 --> Vote[MC Dropout\nMajority Vote]
     A1 --> Vote
     A2 --> Vote
     Vote --> Pred[Final class]
@@ -150,7 +149,7 @@ graph TD
 `VirtualANN`.  Images labelled **A**, **B** and **C** are loaded from disk, shaped
 into a NumPy dataset and cached for reuse.  The network then trains with PyTorch
 using an Adam optimizer and cross‑entropy loss while dropout layers stay active
-to support later Bayesian voting.  After every epoch SynapseX records loss,
+to support later majority voting.  After every epoch SynapseX records loss,
 accuracy, precision, recall and F1 before finally plotting the curves and
 serialising the model weights.
 
