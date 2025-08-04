@@ -8,9 +8,13 @@ SynapseX's machine-learning components are configurable through a set of hyperpa
 |------|---------|-------------|
 | `BATCH_SIZE` | `32` | Number of samples processed in each optimisation step. |
 | `LEARNING_RATE` | `0.001` | Step size used by the Adam optimiser during training. |
-| `EPOCHS` | `10` | Number of passes through the training dataset. |
+| `EPOCHS` | `10` | Minimum number of passes through the training dataset before evaluating stop criteria. |
 | `DROPOUT_RATE` | `0.2` | Dropout probability applied to fully connected layers during training. |
 | `MC_PASSES` | `10` | Stochastic forward passes run during Monte Carlo dropout inference. |
+| `TARGET_ACCURACY` | `0.95` | Training continues until accuracy meets or exceeds this value. |
+| `TARGET_PRECISION` | `0.95` | Training continues until precision meets or exceeds this value. |
+| `TARGET_RECALL` | `0.95` | Training continues until recall meets or exceeds this value. |
+| `TARGET_F1` | `0.95` | Training continues until F1 score meets or exceeds this value. |
 | `LAYER_SIZES` | `[784, 256, 256, 3]` | Example dense network architecture listing neurons per layer. |
 | `IMAGE_SIDE` | `28` | Height and width (in pixels) of input images. |
 | `IMAGE_SIZE` | `784` | Flattened input dimension derived from `IMAGE_SIDE`. |
@@ -30,6 +34,10 @@ The `HyperParameters` dataclass exposes similar knobs for runtime configuration.
 | `image_size` | `28` | Side length of square input images provided to the Transformer classifier. |
 | `dropout` | `0.2` | Dropout probability applied to model layers. |
 | `learning_rate` | `1e-3` | Optimiser step size during training. |
-| `epochs` | `10` | Number of training epochs. |
+| `epochs` | `10` | Minimum number of training epochs before evaluating stop criteria. |
 | `batch_size` | `32` | Mini-batch size for the `DataLoader`. |
 | `mc_dropout_passes` | `10` | Number of forward passes to average when using Monte Carlo dropout. |
+| `target_accuracy` | `0.95` | Training halts once accuracy meets or exceeds this value. |
+| `target_precision` | `0.95` | Training halts once precision meets or exceeds this value. |
+| `target_recall` | `0.95` | Training halts once recall meets or exceeds this value. |
+| `target_f1` | `0.95` | Training halts once F1 score meets or exceeds this value. |

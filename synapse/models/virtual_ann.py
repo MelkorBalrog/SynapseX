@@ -13,6 +13,8 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 import matplotlib.pyplot as plt
 
+from config import hyperparameters as hp
+
 
 class VirtualANN(nn.Module):
     def __init__(self, layer_sizes: List[int], dropout_rate: float = 0.2):
@@ -31,7 +33,18 @@ class VirtualANN(nn.Module):
     def forward(self, x):
         return self.net(x)
 
-    def train_model(self, X: np.ndarray, y: np.ndarray, epochs: int, lr: float, batch_size: int):
+    def train_model(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        epochs: int,
+        lr: float,
+        batch_size: int,
+        min_accuracy: float = hp.TARGET_ACCURACY,
+        min_precision: float = hp.TARGET_PRECISION,
+        min_recall: float = hp.TARGET_RECALL,
+        min_f1: float = hp.TARGET_F1,
+    ):
         """Train the ANN and return matplotlib figures.
 
         The original implementation popped up matplotlib windows via
@@ -47,7 +60,9 @@ class VirtualANN(nn.Module):
         loss_hist, acc_hist, prec_hist, rec_hist, f1_hist = [], [], [], [], []
         num_classes = self.layer_sizes[-1]
         self.train()
-        for _ in range(epochs):
+        epoch = 0
+        while True:
+            epoch += 1
             epoch_loss = 0.0
             correct = 0
             total = 0
@@ -66,7 +81,8 @@ class VirtualANN(nn.Module):
                 all_preds.extend(pred_labels.cpu().numpy().tolist())
                 all_true.extend(yb.cpu().numpy().tolist())
             loss_hist.append(epoch_loss / total)
-            acc_hist.append(correct / total if total else 0)
+            acc = correct / total if total else 0.0
+            acc_hist.append(acc)
             cm = np.zeros((num_classes, num_classes), dtype=int)
             for t, p in zip(all_true, all_preds):
                 cm[t, p] += 1
@@ -81,9 +97,20 @@ class VirtualANN(nn.Module):
                 precs.append(prec)
                 recs.append(rec)
                 f1s.append(f1)
-            prec_hist.append(float(np.mean(precs)))
-            rec_hist.append(float(np.mean(recs)))
-            f1_hist.append(float(np.mean(f1s)))
+            prec = float(np.mean(precs))
+            rec = float(np.mean(recs))
+            f1_val = float(np.mean(f1s))
+            prec_hist.append(prec)
+            rec_hist.append(rec)
+            f1_hist.append(f1_val)
+            if (
+                epoch >= epochs
+                and acc >= min_accuracy
+                and prec >= min_precision
+                and rec >= min_recall
+                and f1_val >= min_f1
+            ):
+                break
         preds_full = self.predict(X)
 
         figs = []
@@ -234,19 +261,70 @@ class PyTorchANN:
     def __init__(self, input_dim: int, num_classes: int, dropout: float = 0.1, nhead: int = 4):
         self.model = TransformerClassifier(input_dim, num_classes, dropout, nhead)
 
-    def train_model(self, X: np.ndarray, y: np.ndarray, epochs: int, lr: float, batch_size: int):
+    def train_model(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        epochs: int,
+        lr: float,
+        batch_size: int,
+        min_accuracy: float = hp.TARGET_ACCURACY,
+        min_precision: float = hp.TARGET_PRECISION,
+        min_recall: float = hp.TARGET_RECALL,
+        min_f1: float = hp.TARGET_F1,
+    ):
         dataset = TensorDataset(torch.from_numpy(X).float(), torch.from_numpy(y).long())
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        num_classes = self.model.classifier.out_features
         self.model.train()
-        for _ in range(epochs):
+        epoch = 0
+        while True:
+            epoch += 1
+            epoch_loss = 0.0
+            correct = 0
+            total = 0
+            all_preds: list[int] = []
+            all_true: list[int] = []
             for xb, yb in loader:
                 optimizer.zero_grad()
                 preds = self.model(xb)
                 loss = criterion(preds, yb)
                 loss.backward()
                 optimizer.step()
+                epoch_loss += loss.item() * xb.size(0)
+                pred_labels = preds.argmax(dim=1)
+                correct += (pred_labels == yb).sum().item()
+                total += xb.size(0)
+                all_preds.extend(pred_labels.cpu().numpy().tolist())
+                all_true.extend(yb.cpu().numpy().tolist())
+            acc = correct / total if total else 0.0
+            cm = np.zeros((num_classes, num_classes), dtype=int)
+            for t, p in zip(all_true, all_preds):
+                cm[t, p] += 1
+            precs, recs, f1s = [], [], []
+            for i in range(num_classes):
+                tp = cm[i, i]
+                fp = cm[:, i].sum() - tp
+                fn = cm[i, :].sum() - tp
+                prec = tp / (tp + fp) if (tp + fp) else 0.0
+                rec = tp / (tp + fn) if (tp + fn) else 0.0
+                f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
+                precs.append(prec)
+                recs.append(rec)
+                f1s.append(f1)
+            prec = float(np.mean(precs))
+            rec = float(np.mean(recs))
+            f1_val = float(np.mean(f1s))
+            if (
+                epoch >= epochs
+                and acc >= min_accuracy
+                and prec >= min_precision
+                and rec >= min_recall
+                and f1_val >= min_f1
+            ):
+                break
 
     def predict(self, X: np.ndarray):
         self.model.eval()
