@@ -328,6 +328,7 @@ class PyTorchANN:
         epoch = 0
         best_f1 = 0.0
         stagnant = 0
+
         while True:
             epoch += 1
             epoch_loss = 0.0
