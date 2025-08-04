@@ -223,7 +223,7 @@ The high‑level flow is shown below:
 flowchart TD
     A[Load & preprocess images] --> B[TensorDataset & DataLoader]
     B --> C{Epoch loop}
-    C --> D[Forward pass]\nCrossEntropy
+    C --> D[Forward pass\\nCrossEntropy]
     D --> E[Backprop & Adam step]
     E --> F[Log metrics]
     F --> C
