@@ -40,6 +40,17 @@ SynapseX bundles several neural architectures and ensemble techniques:
 - **Majority voting.** Predictions from several ANNs are combined to
   yield a robust final prediction.
 
+### Monte Carlo Dropout & Bayesian Thinking (For Beginners)
+
+During training, dropout randomly hides some "brain cells" of the network so it
+doesn't rely too much on any one part.  With Monte Carlo dropout we keep this
+randomness switched on when making a prediction and ask the network the same
+question many times.  Each run gives a slightly different answer because
+different bits are turned off.  Averaging these answers gives the final
+prediction and shows how certain the network is: if the answers agree, it's
+confident; if they vary, it's unsure.  This repeated guessing is a simple way to
+get Bayesian-style uncertainty without complicated maths.
+
 ### Principal ANN Topologies
 
 #### ANN0 – Transformer Classifier
