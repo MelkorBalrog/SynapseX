@@ -90,6 +90,10 @@ graph TD
     V --> F[Final Class]
 ```
 
+## Hyperparameters
+
+The behaviour of the neural networks and training process is controlled by a set of tunable values. Their defaults and roles are documented in [HYPERPARAMETERS.md](HYPERPARAMETERS.md).
+
 ## Architecture
 
 The project models a minimal SoC composed of a CPU, wishbone memory and a
