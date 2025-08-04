@@ -40,6 +40,86 @@ SynapseX bundles several neural architectures and ensemble techniques:
 - **Majority voting.** Predictions from several ANNs are combined to
   yield a robust final prediction.
 
+### Monte Carlo Dropout and Bayesian Inference (Plain English)
+
+Monte Carlo (MC) dropout is **not** a new method invented for SynapseX. It was
+popularised by Yarin Gal and Zoubin Ghahramani in 2016 as a practical
+approximation to Bayesian inference in neural networks. What follows is a
+beginner‑friendly summary of their standard technique.
+
+MC dropout is like asking the same neural network to guess many times while
+randomly forgetting parts of itself. Each time the network makes a prediction,
+some neurons are "dropped" so the network behaves a bit differently. By
+averaging all of these guesses we get a more reliable final answer.
+
+Bayesian inference is a fancy term for reasoning about the uncertainty of those
+guesses. The many MC dropout runs act like sampling from different plausible
+networks. If the guesses agree, we are confident; if they vary widely, the model
+is unsure. This cheap trick gives us an approximation of true Bayesian
+reasoning without heavy mathematics.
+
+#### Step-by-step
+
+1. **Train with dropout** – build your model with dropout layers and train as
+   usual. Dropout randomly zeros some activations so the model does not rely on
+   any single neuron.
+2. **Keep dropout on for inference** – when you want a prediction, *do not*
+   disable dropout.
+3. **Run multiple forward passes** – feed the same input \(x\) through the
+   network \(T\) times. Each pass uses a different random dropout mask, producing
+   predictions \(f_{\theta_t}(x)\).
+4. **Aggregate the predictions** – average the outputs to get a final guess and
+   measure how far individual predictions stray from that average to estimate
+   uncertainty.
+
+```mermaid
+flowchart TD
+    X[Input x] --> P1[Pass 1\nDropout ON]
+    X --> P2[Pass 2\nDropout ON]
+    X --> PT[Pass T\nDropout ON]
+    P1 & P2 & PT --> C[Collect predictions]
+    C --> M[Mean & variance]
+    M --> Y[Prediction +\nuncertainty]
+```
+
+#### Formulas
+
+The averaged prediction and its uncertainty are computed as
+
+$$\hat{y} = \frac{1}{T} \sum_{t=1}^{T} f_{\theta_t}(x)$$
+
+$$\hat{\sigma}^2 = \frac{1}{T} \sum_{t=1}^{T} \left(f_{\theta_t}(x) - \hat{y}\right)^2$$
+
+#### Inputs
+
+- trained network with dropout layers
+- new example \(x\)
+- number of Monte Carlo passes \(T\)
+
+#### Outputs
+
+- mean prediction \(\hat{y}\)
+- uncertainty estimate \(\hat{\sigma}\)
+
+#### Pseudocode
+
+```python
+def mc_dropout_predict(model, x, T):
+    model.train()  # keep dropout active
+    preds = []
+    for _ in range(T):
+        preds.append(model(x))
+    stacked = torch.stack(preds)
+    mean = stacked.mean(dim=0)
+    var = stacked.var(dim=0)
+    return mean, var
+```
+
+Each dropout mask acts like sampling a different set of weights, giving us a
+lightweight Bayesian approximation with just a single trained model. For a
+deeper dive see Gal & Ghahramani, *Dropout as a Bayesian Approximation:*
+*Understanding Dropout in Deep Neural Networks* (2016).
+
 ### Principal ANN Topologies
 
 #### ANN0 – Transformer Classifier
