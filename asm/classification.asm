@@ -1,13 +1,38 @@
-; Load evolved ANNs with architecture encoded in the weight files
+; (A) Define the 4 Principal ANNs with Transformer Layers
+OP_NEUR CONFIG_ANN 0 CREATE_LAYER 784 2352 LEAKYRELU
+OP_NEUR CONFIG_ANN 0 SET_SHAPE 28 28 1
+OP_NEUR CONFIG_ANN 0 ADD_LAYER 2352 TRANSFORMER
+OP_NEUR CONFIG_ANN 0 ADD_LAYER 2352 TRANSFORMER
+OP_NEUR CONFIG_ANN 0 ADD_LAYER 2352 TRANSFORMER
+OP_NEUR CONFIG_ANN 0 ADD_LAYER 2352 LEAKYRELU
+OP_NEUR CONFIG_ANN 0 ADD_LAYER 3 NONE
+OP_NEUR CONFIG_ANN 0 FINALIZE
+OP_NEUR CONFIG_ANN 1 CREATE_LAYER 784 256 LEAKYRELU
+OP_NEUR CONFIG_ANN 1 ADD_LAYER 2560 LEAKYRELU
+OP_NEUR CONFIG_ANN 1 ADD_LAYER 256 LEAKYRELU
+OP_NEUR CONFIG_ANN 1 ADD_LAYER 2560 LEAKYRELU
+OP_NEUR CONFIG_ANN 1 ADD_LAYER 256 LEAKYRELU
+OP_NEUR CONFIG_ANN 1 ADD_LAYER 2560 LEAKYRELU
+OP_NEUR CONFIG_ANN 1 ADD_LAYER 3 NONE
+OP_NEUR CONFIG_ANN 1 FINALIZE
+OP_NEUR CONFIG_ANN 2 CREATE_LAYER 784 256 LEAKYRELU
+OP_NEUR CONFIG_ANN 2 ADD_LAYER 9256 COMBINED_STEP
+OP_NEUR CONFIG_ANN 2 ADD_LAYER 256 LEAKYRELU
+OP_NEUR CONFIG_ANN 2 ADD_LAYER 9256 COMBINED_STEP
+OP_NEUR CONFIG_ANN 2 ADD_LAYER 256 LEAKYRELU
+OP_NEUR CONFIG_ANN 2 ADD_LAYER 9256 COMBINED_STEP
+OP_NEUR CONFIG_ANN 2 ADD_LAYER 3 NONE
+OP_NEUR CONFIG_ANN 2 FINALIZE
+; (B) Load All Trained Weights for Classification
 OP_NEUR LOAD_ALL trained_weights
-; Perform inference on each ANN
+; (C) Perform Inference on the 4 Principal ANNs
 OP_NEUR INFER_ANN 0 true 10
 ADD $t0, $zero, $t9
 OP_NEUR INFER_ANN 1 true 10
 ADD $t1, $zero, $t9
 OP_NEUR INFER_ANN 2 true 10
 ADD $t2, $zero, $t9
-; Majority voting among the ANNs
+; (D) Manual Majority Voting Among the 4 ANNs
 ADDI $t10, $zero, 0
 ADDI $t11, $zero, 0
 ADDI $t12, $zero, 0
@@ -53,7 +78,7 @@ ann2_isU:
 ADDI $t12, $t12, 1
 J ann2_done
 ann2_done:
-; Final decision based on majority vote
+; (E) Decide Final Class based on Majority Vote
 BGT $t10, $t11, checkA_vsU
 BGT $t11, $t10, checkB_vsU
 ADDI $t9, $zero, 2
@@ -72,4 +97,5 @@ J finalize_output
 finalizeB:
 ADDI $t9, $zero, 1           ; Class B selected – no green indicator
 finalize_output:
+; Final result is in $t9. Use green color when class A is predicted.
 HALT
