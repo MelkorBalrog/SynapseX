@@ -237,6 +237,18 @@ metrics—accuracy, precision, recall and F1—alongside the loss for each epoch
 After inference a confusion matrix is printed and plotted to highlight
 misclassified examples.
 
+## Hyper-parameter Optimisation
+
+To squeeze out extra accuracy, recall, precision and F1 score the training
+helpers incorporate a couple of classic optimisation strategies:
+
+- **Early stopping** halts training when the F1 score fails to improve for a few
+  epochs, reducing the risk of overfitting.
+- **Genetic algorithms** explore different dropout and learning-rate
+  combinations and pick the configuration with the best F1 score.  The compact
+  implementation lives in `synapsex/genetic.py` and can be invoked via
+  `PyTorchANN.tune_hyperparameters_ga` before calling `train`.
+
 ## Assembly Instructions
 
 SynapseX understands a tiny instruction set sufficient for the demos:
