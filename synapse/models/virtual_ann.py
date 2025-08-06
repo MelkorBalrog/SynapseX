@@ -172,32 +172,23 @@ class VirtualANN(nn.Module):
         return fig
 
     def visualize_confusion_matrix(self, y_true, y_pred):
-        """Visualise binary confusion matrix labelled with TN/FP/FN/TP."""
-        cm = np.zeros((2, 2), dtype=int)
+        """Visualise a confusion matrix for arbitrary class counts."""
+        num_classes = int(max(y_true.max(), y_pred.max()) + 1)
+        cm = np.zeros((num_classes, num_classes), dtype=int)
         for t, p in zip(y_true, y_pred):
-            if t == 1 and p == 1:
-                cm[1, 1] += 1  # TP
-            elif t == 1 and p == 0:
-                cm[1, 0] += 1  # FN
-            elif t == 0 and p == 1:
-                cm[0, 1] += 1  # FP
-            else:
-                cm[0, 0] += 1  # TN
+            cm[int(t), int(p)] += 1
         print("Confusion matrix:\n", cm)
         fig, ax = plt.subplots()
         im = ax.imshow(cm, cmap=plt.cm.Blues)
         fig.colorbar(im, ax=ax)
         ax.set_xlabel("Predicted")
         ax.set_ylabel("Actual")
-        ax.set_xticks([0, 1])
-        ax.set_yticks([0, 1])
-        ax.set_xticklabels(["Negative", "Positive"])
-        ax.set_yticklabels(["Negative", "Positive"])
+        ax.set_xticks(range(num_classes))
+        ax.set_yticks(range(num_classes))
         ax.set_title("Confusion Matrix")
-        labels = [["TN", "FP"], ["FN", "TP"]]
-        for i in range(2):
-            for j in range(2):
-                ax.text(j, i, f"{labels[i][j]}: {cm[i, j]}", ha="center", va="center", color="black")
+        for i in range(num_classes):
+            for j in range(num_classes):
+                ax.text(j, i, str(cm[i, j]), ha="center", va="center", color="black")
         plt.tight_layout()
         return fig
 
@@ -212,12 +203,19 @@ class VirtualANN(nn.Module):
 class TransformerClassifier(nn.Module):
     """Simple transformer-based classifier with adjustable embedding dimension."""
 
-    def __init__(self, input_dim: int, num_classes: int, dropout: float = 0.1, nhead: int = 4):
+    def __init__(
+        self,
+        input_dim: int,
+        num_classes: int,
+        dropout: float = 0.1,
+        nhead: int = 4,
+        num_layers: int = 1,
+    ):
         super().__init__()
         embed_dim = ((input_dim + nhead - 1) // nhead) * nhead
         self.proj = nn.Linear(input_dim, embed_dim)
         encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=nhead, dropout=dropout, batch_first=True)
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=1)
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.classifier = nn.Linear(embed_dim, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -231,8 +229,15 @@ class TransformerClassifier(nn.Module):
 class PyTorchANN:
     """Wrapper around ``TransformerClassifier`` providing training and inference helpers."""
 
-    def __init__(self, input_dim: int, num_classes: int, dropout: float = 0.1, nhead: int = 4):
-        self.model = TransformerClassifier(input_dim, num_classes, dropout, nhead)
+    def __init__(
+        self,
+        input_dim: int,
+        num_classes: int,
+        dropout: float = 0.1,
+        nhead: int = 4,
+        num_layers: int = 1,
+    ):
+        self.model = TransformerClassifier(input_dim, num_classes, dropout, nhead, num_layers)
 
     def train_model(self, X: np.ndarray, y: np.ndarray, epochs: int, lr: float, batch_size: int):
         dataset = TensorDataset(torch.from_numpy(X).float(), torch.from_numpy(y).long())
