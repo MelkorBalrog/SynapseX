@@ -8,5 +8,7 @@ class HyperParameters:
     epochs: int = 10
     batch_size: int = 32
     mc_dropout_passes: int = 10
+    num_layers: int = 2
+    nhead: int = 4
 
 hp = HyperParameters()
