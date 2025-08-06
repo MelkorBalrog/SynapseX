@@ -237,6 +237,18 @@ metrics—accuracy, precision, recall and F1—alongside the loss for each epoch
 After inference a confusion matrix is printed and plotted to highlight
 misclassified examples.
 
+## Hyper-parameter Optimisation
+
+To squeeze out extra accuracy, recall, precision and F1 score the training
+helpers incorporate a couple of classic optimisation strategies:
+
+- **Early stopping** halts training when the F1 score fails to improve for a few
+  epochs, reducing the risk of overfitting.
+- **Genetic algorithms** explore different dropout and learning-rate
+  combinations and retain the best scoring network to curb false positives and
+  negatives.  The compact implementation lives in `synapsex/genetic.py` and can
+  be invoked via `PyTorchANN.tune_hyperparameters_ga` before calling `train`.
+
 ## Assembly Instructions
 
 SynapseX understands a tiny instruction set sufficient for the demos:
@@ -250,6 +262,12 @@ SynapseX understands a tiny instruction set sufficient for the demos:
 | `BGT rs, rt, label` | branch if greater than |
 | `J label` | jump to label |
 | `OP_NEUR <cmd>` | issue neural‑network command (e.g. `TRAIN_ANN`, `INFER_ANN`) |
+
+The neural helper commands accept a few parameters to expose training
+hyper‑parameters.  `CONFIG_ANN <id> FINALIZE <dropout>` sets the
+network‑wide dropout rate before the ANN instance is created.  During
+training `TRAIN_ANN <id> <epochs> <lr> <batch>` runs optimisation for the
+given number of epochs using the specified learning rate and batch size.
 
 ## Execution Flow
 

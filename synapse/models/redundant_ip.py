@@ -24,6 +24,7 @@ class RedundantNeuralIP:
     def __init__(self, train_data_dir: str | None = None, show_plots: bool = True) -> None:
         self.ann_map: Dict[int, VirtualANN] = {}
         self.layer_defs: Dict[int, List[int]] = {}
+        self.dropout_rates: Dict[int, float] = {}
         self.last_result: int | None = None
         self.train_data_dir = train_data_dir
         self._cached_dataset: tuple[np.ndarray, np.ndarray] | None = None
@@ -76,8 +77,10 @@ class RedundantNeuralIP:
             self.layer_defs.setdefault(ann_id, []).append(out_dim)
         elif cmd == "FINALIZE":
             layers = self.layer_defs.get(ann_id)
+            dropout = float(tokens[2]) if len(tokens) >= 3 else 0.2
             if layers and len(layers) >= 2:
-                self.ann_map[ann_id] = VirtualANN(layers)
+                self.dropout_rates[ann_id] = dropout
+                self.ann_map[ann_id] = VirtualANN(layers, dropout_rate=dropout)
 
     # ------------------------------------------------------------------
     # TRAIN_ANN helpers
@@ -87,6 +90,8 @@ class RedundantNeuralIP:
             return
         ann_id = int(tokens[0])
         epochs = int(tokens[1]) if len(tokens) > 1 else 5
+        lr = float(tokens[2]) if len(tokens) > 2 else 0.005
+        batch_size = int(tokens[3]) if len(tokens) > 3 else 16
         ann = self.ann_map.get(ann_id)
         if ann is None:
             return
@@ -134,7 +139,7 @@ class RedundantNeuralIP:
             print("Training data dimensions do not match ANN configuration.")
             return
 
-        figs = ann.train_model(X, y, epochs=epochs, lr=0.005, batch_size=16)
+        figs = ann.train_model(X, y, epochs=epochs, lr=lr, batch_size=batch_size)
         self.last_figures.extend(figs)
         if self.show_plots:
             for fig in figs:
