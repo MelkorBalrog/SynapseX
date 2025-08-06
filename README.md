@@ -263,6 +263,12 @@ SynapseX understands a tiny instruction set sufficient for the demos:
 | `J label` | jump to label |
 | `OP_NEUR <cmd>` | issue neural‑network command (e.g. `TRAIN_ANN`, `INFER_ANN`) |
 
+The neural helper commands accept a few parameters to expose training
+hyper‑parameters.  `CONFIG_ANN <id> FINALIZE <dropout>` sets the
+network‑wide dropout rate before the ANN instance is created.  During
+training `TRAIN_ANN <id> <epochs> <lr> <batch>` runs optimisation for the
+given number of epochs using the specified learning rate and batch size.
+
 ## Execution Flow
 
 During classification the script performs the following high level steps:
