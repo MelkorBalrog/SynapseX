@@ -111,14 +111,18 @@ class RedundantNeuralIP:
         if ann is None:
             return
         addr = 0x5000
-        in_dim = ann.hp.image_size
-        data = []
+        in_dim = ann.hp.image_size * ann.hp.image_size
+        data: List[float] = []
         for i in range(in_dim):
             word = memory.read(addr + i)
             data.append(np.frombuffer(np.uint32(word).tobytes(), dtype=np.float32)[0])
         X = np.array(data, dtype=np.float32).reshape(1, -1)
-        probs = ann.predict(torch.from_numpy(X), mc_dropout=len(tokens) > 1 and tokens[1].lower() == "true")
+        probs = ann.predict(
+            torch.from_numpy(X),
+            mc_dropout=len(tokens) > 1 and tokens[1].lower() == "true",
+        )
         self.last_result = int(probs.argmax(dim=1)[0])
+        print(f"ANN {ann_id} prediction: {self.last_result}")
 
     # ------------------------------------------------------------------
     # TUNE_GA helpers
