@@ -85,6 +85,8 @@ class RedundantNeuralIP:
             return
         ann_id = int(tokens[0])
         epochs = int(tokens[1]) if len(tokens) > 1 else 5
+        lr = float(tokens[2]) if len(tokens) > 2 else 0.005
+        batch_size = int(tokens[3]) if len(tokens) > 3 else 16
         ann = self.ann_map.get(ann_id)
         if ann is None:
             return
