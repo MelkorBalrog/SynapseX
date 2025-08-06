@@ -30,35 +30,61 @@ class PyTorchANN:
             nhead=self.hp.nhead,
         )
 
-    def train(self, X: torch.Tensor, y: torch.Tensor, *, patience: int = 2) -> Dict[str, float]:
+    def train(
+        self,
+        X: torch.Tensor,
+        y: torch.Tensor,
+        *,
+        patience: int = 3,
+        min_epochs: int = 5,
+        val_split: float = 0.2,
+    ) -> Dict[str, float]:
         """Train the network and return evaluation metrics.
 
-        Implements a small form of early stopping based on the F1 score to help
-        improve accuracy, precision and recall."""
+        Uses a small validation split for early stopping based on the F1 score
+        and restores the best observed model weights.  ``min_epochs`` guarantees
+        that a few epochs are always run so the network can start learning."""
 
-        dataset = TensorDataset(X.unsqueeze(1), y)
-        loader = DataLoader(dataset, batch_size=self.hp.batch_size, shuffle=True)
+        # Split the data into a deterministic training/validation partition so
+        # early stopping decisions are based on unseen samples.
+        n = len(X)
+        val_size = int(n * val_split)
+        train_X, val_X = X[:-val_size], X[-val_size:]
+        train_y, val_y = y[:-val_size], y[-val_size:]
+
+        train_ds = TensorDataset(train_X.unsqueeze(1), train_y)
+        train_loader = DataLoader(
+            train_ds, batch_size=self.hp.batch_size, shuffle=True
+        )
+
         opt = torch.optim.Adam(self.model.parameters(), lr=self.hp.learning_rate)
         criterion = nn.CrossEntropyLoss()
         self.model.train()
-        best_f1 = 0.0
+
+        best_f1 = -1.0
+        best_state: Optional[dict] = None
         stale_epochs = 0
-        for _ in range(self.hp.epochs):
-            for xb, yb in loader:
+
+        for epoch in range(self.hp.epochs):
+            for xb, yb in train_loader:
                 opt.zero_grad()
                 logits = self.model(xb)
                 loss = criterion(logits, yb)
                 loss.backward()
                 opt.step()
 
-            metrics = self.evaluate(X, y)
-            if metrics["f1"] > best_f1:
+            metrics = self.evaluate(val_X, val_y)
+            if metrics["f1"] > best_f1 + 1e-4:
                 best_f1 = metrics["f1"]
+                best_state = self.model.state_dict()
                 stale_epochs = 0
             else:
                 stale_epochs += 1
-                if stale_epochs >= patience:
+                if epoch + 1 >= min_epochs and stale_epochs >= patience:
                     break
+
+        if best_state is not None:
+            self.model.load_state_dict(best_state)
 
         return self.evaluate(X, y)
 

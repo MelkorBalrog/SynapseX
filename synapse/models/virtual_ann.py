@@ -172,32 +172,23 @@ class VirtualANN(nn.Module):
         return fig
 
     def visualize_confusion_matrix(self, y_true, y_pred):
-        """Visualise binary confusion matrix labelled with TN/FP/FN/TP."""
-        cm = np.zeros((2, 2), dtype=int)
+        """Visualise a confusion matrix for arbitrary class counts."""
+        num_classes = int(max(y_true.max(), y_pred.max()) + 1)
+        cm = np.zeros((num_classes, num_classes), dtype=int)
         for t, p in zip(y_true, y_pred):
-            if t == 1 and p == 1:
-                cm[1, 1] += 1  # TP
-            elif t == 1 and p == 0:
-                cm[1, 0] += 1  # FN
-            elif t == 0 and p == 1:
-                cm[0, 1] += 1  # FP
-            else:
-                cm[0, 0] += 1  # TN
+            cm[int(t), int(p)] += 1
         print("Confusion matrix:\n", cm)
         fig, ax = plt.subplots()
         im = ax.imshow(cm, cmap=plt.cm.Blues)
         fig.colorbar(im, ax=ax)
         ax.set_xlabel("Predicted")
         ax.set_ylabel("Actual")
-        ax.set_xticks([0, 1])
-        ax.set_yticks([0, 1])
-        ax.set_xticklabels(["Negative", "Positive"])
-        ax.set_yticklabels(["Negative", "Positive"])
+        ax.set_xticks(range(num_classes))
+        ax.set_yticks(range(num_classes))
         ax.set_title("Confusion Matrix")
-        labels = [["TN", "FP"], ["FN", "TP"]]
-        for i in range(2):
-            for j in range(2):
-                ax.text(j, i, f"{labels[i][j]}: {cm[i, j]}", ha="center", va="center", color="black")
+        for i in range(num_classes):
+            for j in range(num_classes):
+                ax.text(j, i, str(cm[i, j]), ha="center", va="center", color="black")
         plt.tight_layout()
         return fig
 

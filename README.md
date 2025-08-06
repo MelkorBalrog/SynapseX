@@ -14,7 +14,11 @@ hand-written characters.
 - **Training and inference.** Neural networks can be trained on a directory of
   labelled images or used to classify a single image from the command line.
 - **Evaluation metrics.** Training curves track loss, accuracy, precision,
-  recall and F1 while a confusion matrix visualises classification results.
+  recall and F1 while a confusion matrix visualises classification results for
+  any number of classes.
+ - **Validation-based early stopping.** Training monitors a held-out validation
+   split, restoring the best model weights to avoid the "stuck at one class"
+   behaviour and improve overall metrics.
 
 ## Getting Started
 
