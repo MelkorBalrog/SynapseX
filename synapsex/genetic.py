@@ -28,8 +28,16 @@ import torch
 
 from .config import HyperParameters, hp
 
+def _valid_heads(image_size: int) -> List[int]:
+    """Return attention-head counts compatible with the embedding size."""
 
-def _random_hyperparameters() -> HyperParameters:
+    patch_size = max(image_size // 4, 1)
+    embed_dim = patch_size * patch_size
+    heads = [h for h in range(1, min(embed_dim, 8) + 1) if embed_dim % h == 0]
+    return heads or [1]
+
+
+def _random_hyperparameters(valid_heads: List[int]) -> HyperParameters:
     """Create a random set of hyper-parameters within sensible bounds."""
 
     return HyperParameters(
@@ -40,7 +48,7 @@ def _random_hyperparameters() -> HyperParameters:
         batch_size=hp.batch_size,
         mc_dropout_passes=hp.mc_dropout_passes,
         num_layers=random.randint(1, 4),
-        nhead=random.choice([2, 4, 8]),
+        nhead=random.choice(valid_heads),
     )
 
 
@@ -90,8 +98,9 @@ def genetic_search(
     X_train, y_train = X[train_idx], y[train_idx]
     X_val, y_val = X[val_idx], y[val_idx]
 
+    valid_heads = _valid_heads(hp.image_size)
     population: List[HyperParameters] = [
-        _random_hyperparameters() for _ in range(population_size)
+        _random_hyperparameters(valid_heads) for _ in range(population_size)
     ]
 
     best_score = -1.0
@@ -135,7 +144,9 @@ def genetic_search(
                 child_layers += random.choice([-1, 1])
             child_layers = min(max(child_layers, 1), 4)
             if random.random() < 0.3:
-                child_heads = random.choice([2, 4, 8])
+                child_heads = random.choice(valid_heads)
+            if child_heads not in valid_heads:
+                child_heads = random.choice(valid_heads)
 
             child = replace(
                 parent1,

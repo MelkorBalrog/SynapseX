@@ -1,4 +1,5 @@
 import os
+from dataclasses import replace
 from typing import Dict, Tuple, List, Optional
 
 import torch
@@ -22,6 +23,13 @@ class PyTorchANN:
 
     def __init__(self, hp_override: Optional[HyperParameters] = None):
         self.hp = hp_override or hp
+        patch_size = max(self.hp.image_size // 4, 1)
+        embed_dim = patch_size * patch_size
+        if embed_dim % self.hp.nhead != 0:
+            for candidate in range(self.hp.nhead, 0, -1):
+                if embed_dim % candidate == 0:
+                    self.hp = replace(self.hp, nhead=candidate)
+                    break
         self.model = TransformerClassifier(
             self.hp.image_size,
             num_classes=3,
@@ -164,6 +172,14 @@ class PyTorchANN:
             hp_dict = state.get("hp")
             if hp_dict:
                 self.hp = HyperParameters(**hp_dict)
+                patch_size = max(self.hp.image_size // 4, 1)
+                embed_dim = patch_size * patch_size
+                if embed_dim % self.hp.nhead != 0:
+                    for candidate in range(self.hp.nhead, 0, -1):
+                        if embed_dim % candidate == 0:
+                            self.hp = replace(self.hp, nhead=candidate)
+                            break
+
             self.model = TransformerClassifier(
                 self.hp.image_size,
                 num_classes=3,
@@ -174,6 +190,14 @@ class PyTorchANN:
             # Allow loading models saved without positional embeddings
             self.model.load_state_dict(state["state_dict"], strict=False)
         else:
+            patch_size = max(self.hp.image_size // 4, 1)
+            embed_dim = patch_size * patch_size
+            if embed_dim % self.hp.nhead != 0:
+                for candidate in range(self.hp.nhead, 0, -1):
+                    if embed_dim % candidate == 0:
+                        self.hp = replace(self.hp, nhead=candidate)
+                        break
+
             self.model = TransformerClassifier(
                 self.hp.image_size,
                 num_classes=3,

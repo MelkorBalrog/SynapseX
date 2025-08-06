@@ -156,7 +156,7 @@ graph TD
 
 ## Hyperparameters
 
-The behaviour of the neural networks and training process is controlled by a set of tunable values. Their defaults and roles are documented in [HYPERPARAMETERS.md](HYPERPARAMETERS.md).
+The behaviour of the neural networks and training process is controlled by a set of tunable values. Their defaults and roles are documented in [HYPERPARAMETERS.md](HYPERPARAMETERS.md). The transformer automatically clamps the attention-head count so it divides the embedding size, avoiding configuration errors like "embed_dim must be divisible by num_heads".
 
 ## Architecture
 
@@ -278,12 +278,6 @@ network‑wide dropout rate before the ANN instance is created.  `TUNE_GA <id>
 best performing network structure and learning rate.  During training
 `TRAIN_ANN <id> <epochs> <lr> <batch>` runs optimisation for the given number
 of epochs using the specified learning rate and batch size.
-
-The neural helper commands accept a few parameters to expose training
-hyper‑parameters.  `CONFIG_ANN <id> FINALIZE <dropout>` sets the
-network‑wide dropout rate before the ANN instance is created.  During
-training `TRAIN_ANN <id> <epochs> <lr> <batch>` runs optimisation for the
-given number of epochs using the specified learning rate and batch size.
 
 ## Execution Flow
 

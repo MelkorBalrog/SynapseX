@@ -34,4 +34,4 @@ The `HyperParameters` dataclass exposes similar knobs for runtime configuration.
 | `batch_size` | `32` | Mini-batch size for the `DataLoader`. |
 | `mc_dropout_passes` | `10` | Number of forward passes to average when using Monte Carlo dropout. |
 | `num_layers` | `2` | Number of transformer encoder layers used by the classifier. |
-| `nhead` | `4` | Attention heads per transformer layer. |
+| `nhead` | `4` | Attention heads per transformer layer. Adjusted to divide the embedding dimension. |
