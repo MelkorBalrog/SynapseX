@@ -38,6 +38,29 @@ class PyTorchANN:
             nhead=self.hp.nhead,
         )
 
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+    def _format_input(self, X: torch.Tensor) -> torch.Tensor:
+        """Reshape tensors to ``(N, 1, image_size, image_size)``.
+
+        Training and inference code often provides flattened images of shape
+        ``(N, image_size * image_size)``.  The transformer-based classifier,
+        however, expects 4D image tensors.  This helper centralises the
+        conversion so all call sites consistently feed the network correctly
+        shaped inputs.
+        """
+
+        if X.dim() == 1:
+            X = X.unsqueeze(0)
+        if X.dim() == 2:
+            return X.view(-1, 1, self.hp.image_size, self.hp.image_size)
+        if X.dim() == 3 and X.size(1) == 1:
+            return X.view(-1, 1, self.hp.image_size, self.hp.image_size)
+        if X.dim() == 4:
+            return X
+        raise ValueError(f"Unexpected input shape {tuple(X.shape)}")
+
     def train(
         self,
         X: torch.Tensor,
@@ -60,7 +83,7 @@ class PyTorchANN:
         train_X, val_X = X[:-val_size], X[-val_size:]
         train_y, val_y = y[:-val_size], y[-val_size:]
 
-        train_ds = TensorDataset(train_X.unsqueeze(1), train_y)
+        train_ds = TensorDataset(self._format_input(train_X), train_y)
         train_loader = DataLoader(
             train_ds, batch_size=self.hp.batch_size, shuffle=True
         )
@@ -97,7 +120,7 @@ class PyTorchANN:
         return self.evaluate(X, y)
 
     def predict(self, X: torch.Tensor, mc_dropout: bool = False) -> torch.Tensor:
-        X = X.unsqueeze(1)
+        X = self._format_input(X)
         if mc_dropout:
             self.model.train()  # enable dropout
             preds = []
@@ -116,7 +139,7 @@ class PyTorchANN:
 
         self.model.eval()
         with torch.no_grad():
-            logits = self.model(X.unsqueeze(1))
+            logits = self.model(self._format_input(X))
             preds = logits.argmax(dim=1)
 
         accuracy = float((preds == y).float().mean().item())
@@ -179,7 +202,6 @@ class PyTorchANN:
                         if embed_dim % candidate == 0:
                             self.hp = replace(self.hp, nhead=candidate)
                             break
-
             self.model = TransformerClassifier(
                 self.hp.image_size,
                 num_classes=3,
@@ -197,7 +219,6 @@ class PyTorchANN:
                     if embed_dim % candidate == 0:
                         self.hp = replace(self.hp, nhead=candidate)
                         break
-
             self.model = TransformerClassifier(
                 self.hp.image_size,
                 num_classes=3,
