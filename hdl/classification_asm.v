@@ -4,30 +4,9 @@
 // developers can reference the instruction set and craft their own apps.
 module classification_asm;
     initial begin
-        $display("; (A) Define the 3 Principal ANNs with Transformer Layers");
-        $display("OP_NEUR CONFIG_ANN 0 CREATE_LAYER 784 2352 LEAKYRELU");
-        $display("OP_NEUR CONFIG_ANN 0 SET_SHAPE 28 28 1");
-        $display("OP_NEUR CONFIG_ANN 0 ADD_LAYER 2352 TRANSFORMER");
-        $display("OP_NEUR CONFIG_ANN 0 ADD_LAYER 2352 TRANSFORMER");
-        $display("OP_NEUR CONFIG_ANN 0 ADD_LAYER 2352 TRANSFORMER");
-        $display("OP_NEUR CONFIG_ANN 0 ADD_LAYER 2352 LEAKYRELU");
-        $display("OP_NEUR CONFIG_ANN 0 ADD_LAYER 3 NONE");
+        $display("; (A) Initialize the 3 Principal ANNs (architecture loaded from weights)");
         $display("OP_NEUR CONFIG_ANN 0 FINALIZE 0.2");
-        $display("OP_NEUR CONFIG_ANN 1 CREATE_LAYER 784 256 LEAKYRELU");
-        $display("OP_NEUR CONFIG_ANN 1 ADD_LAYER 2560 LEAKYRELU");
-        $display("OP_NEUR CONFIG_ANN 1 ADD_LAYER 256 LEAKYRELU");
-        $display("OP_NEUR CONFIG_ANN 1 ADD_LAYER 2560 LEAKYRELU");
-        $display("OP_NEUR CONFIG_ANN 1 ADD_LAYER 256 LEAKYRELU");
-        $display("OP_NEUR CONFIG_ANN 1 ADD_LAYER 2560 LEAKYRELU");
-        $display("OP_NEUR CONFIG_ANN 1 ADD_LAYER 3 NONE");
         $display("OP_NEUR CONFIG_ANN 1 FINALIZE 0.2");
-        $display("OP_NEUR CONFIG_ANN 2 CREATE_LAYER 784 256 LEAKYRELU");
-        $display("OP_NEUR CONFIG_ANN 2 ADD_LAYER 9256 COMBINED_STEP");
-        $display("OP_NEUR CONFIG_ANN 2 ADD_LAYER 256 LEAKYRELU");
-        $display("OP_NEUR CONFIG_ANN 2 ADD_LAYER 9256 COMBINED_STEP");
-        $display("OP_NEUR CONFIG_ANN 2 ADD_LAYER 256 LEAKYRELU");
-        $display("OP_NEUR CONFIG_ANN 2 ADD_LAYER 9256 COMBINED_STEP");
-        $display("OP_NEUR CONFIG_ANN 2 ADD_LAYER 3 NONE");
         $display("OP_NEUR CONFIG_ANN 2 FINALIZE 0.2");
         $display("; (B) Load All Trained Weights for Classification");
         $display("OP_NEUR LOAD_ALL trained_weights");

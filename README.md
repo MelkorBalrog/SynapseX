@@ -269,7 +269,15 @@ SynapseX understands a tiny instruction set sufficient for the demos:
 | `BEQ rs, rt, label` | branch if equal |
 | `BGT rs, rt, label` | branch if greater than |
 | `J label` | jump to label |
-| `OP_NEUR <cmd>` | issue neural‑network command (e.g. `TRAIN_ANN`, `INFER_ANN`) |
+| `OP_NEUR <cmd>` | issue neural‑network command (e.g. `TUNE_GA`, `TRAIN_ANN`, `INFER_ANN`) |
+
+The neural helper commands accept a few parameters to expose training
+hyper‑parameters.  `CONFIG_ANN <id> FINALIZE <dropout>` sets the
+network‑wide dropout rate before the ANN instance is created.  `TUNE_GA <id>
+<generations> <population>` runs a small genetic algorithm to search for the
+best performing network structure and learning rate.  During training
+`TRAIN_ANN <id> <epochs> <lr> <batch>` runs optimisation for the given number
+of epochs using the specified learning rate and batch size.
 
 The neural helper commands accept a few parameters to expose training
 hyper‑parameters.  `CONFIG_ANN <id> FINALIZE <dropout>` sets the
