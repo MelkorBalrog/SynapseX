@@ -28,7 +28,6 @@ import torch
 
 from .config import HyperParameters, hp
 
-
 def _valid_heads(image_size: int) -> List[int]:
     """Return attention-head counts compatible with the embedding size."""
 

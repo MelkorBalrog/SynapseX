@@ -179,6 +179,7 @@ class PyTorchANN:
                         if embed_dim % candidate == 0:
                             self.hp = replace(self.hp, nhead=candidate)
                             break
+
             self.model = TransformerClassifier(
                 self.hp.image_size,
                 num_classes=3,
@@ -196,6 +197,7 @@ class PyTorchANN:
                     if embed_dim % candidate == 0:
                         self.hp = replace(self.hp, nhead=candidate)
                         break
+
             self.model = TransformerClassifier(
                 self.hp.image_size,
                 num_classes=3,
