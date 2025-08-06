@@ -212,12 +212,19 @@ class VirtualANN(nn.Module):
 class TransformerClassifier(nn.Module):
     """Simple transformer-based classifier with adjustable embedding dimension."""
 
-    def __init__(self, input_dim: int, num_classes: int, dropout: float = 0.1, nhead: int = 4):
+    def __init__(
+        self,
+        input_dim: int,
+        num_classes: int,
+        dropout: float = 0.1,
+        nhead: int = 4,
+        num_layers: int = 1,
+    ):
         super().__init__()
         embed_dim = ((input_dim + nhead - 1) // nhead) * nhead
         self.proj = nn.Linear(input_dim, embed_dim)
         encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=nhead, dropout=dropout, batch_first=True)
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=1)
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.classifier = nn.Linear(embed_dim, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -231,8 +238,15 @@ class TransformerClassifier(nn.Module):
 class PyTorchANN:
     """Wrapper around ``TransformerClassifier`` providing training and inference helpers."""
 
-    def __init__(self, input_dim: int, num_classes: int, dropout: float = 0.1, nhead: int = 4):
-        self.model = TransformerClassifier(input_dim, num_classes, dropout, nhead)
+    def __init__(
+        self,
+        input_dim: int,
+        num_classes: int,
+        dropout: float = 0.1,
+        nhead: int = 4,
+        num_layers: int = 1,
+    ):
+        self.model = TransformerClassifier(input_dim, num_classes, dropout, nhead, num_layers)
 
     def train_model(self, X: np.ndarray, y: np.ndarray, epochs: int, lr: float, batch_size: int):
         dataset = TensorDataset(torch.from_numpy(X).float(), torch.from_numpy(y).long())
