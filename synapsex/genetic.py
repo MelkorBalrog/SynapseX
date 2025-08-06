@@ -10,7 +10,8 @@ hyper‑parameters that strongly influence classification metrics such as
 accuracy, recall and precision.  Each individual in the population represents a
 unique combination of these parameters.  Individuals are evaluated by training a
 model for a few epochs and scoring it on a held‑out validation set.  The best
-performer is returned as the suggested configuration.
+performing network and its parameters are returned so the strongest candidate is
+not lost to random re‑initialisation.
 
 The algorithm is purposely small so that projects can quickly experiment with
 genetic optimisation without pulling in heavy third‑party libraries.
@@ -20,7 +21,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import replace
-from typing import List
+from typing import List, Tuple, Optional
 
 import torch
 
@@ -40,9 +41,14 @@ def _random_hyperparameters() -> HyperParameters:
     )
 
 
-def _evaluate(hparams: HyperParameters, X_train: torch.Tensor, y_train: torch.Tensor,
-              X_val: torch.Tensor, y_val: torch.Tensor) -> float:
-    """Train a model with ``hparams`` and return the validation F1 score."""
+def _evaluate(
+    hparams: HyperParameters,
+    X_train: torch.Tensor,
+    y_train: torch.Tensor,
+    X_val: torch.Tensor,
+    y_val: torch.Tensor,
+) -> Tuple[float, "PyTorchANN"]:
+    """Train a model with ``hparams`` and return (F1 score, model)."""
 
     # Local import to avoid a circular dependency at module load time.
     from .neural import PyTorchANN
@@ -50,12 +56,16 @@ def _evaluate(hparams: HyperParameters, X_train: torch.Tensor, y_train: torch.Te
     ann = PyTorchANN(hparams)
     ann.train(X_train, y_train)
     metrics = ann.evaluate(X_val, y_val)
-    return metrics["f1"]
+    return metrics["f1"], ann
 
 
-def genetic_search(X: torch.Tensor, y: torch.Tensor, generations: int = 5,
-                   population_size: int = 8) -> HyperParameters:
-    """Run a tiny genetic algorithm and return the best ``HyperParameters``.
+def genetic_search(
+    X: torch.Tensor,
+    y: torch.Tensor,
+    generations: int = 5,
+    population_size: int = 8,
+) -> Tuple[HyperParameters, "PyTorchANN"]:
+    """Run a tiny genetic algorithm and return the best network and parameters.
 
     Parameters
     ----------
@@ -77,12 +87,31 @@ def genetic_search(X: torch.Tensor, y: torch.Tensor, generations: int = 5,
     X_train, y_train = X[train_idx], y[train_idx]
     X_val, y_val = X[val_idx], y[val_idx]
 
-    population: List[HyperParameters] = [_random_hyperparameters() for _ in range(population_size)]
+    population: List[HyperParameters] = [
+        _random_hyperparameters() for _ in range(population_size)
+    ]
+
+    best_score = -1.0
+    best_hp: Optional[HyperParameters] = None
+    best_ann = None
 
     for _ in range(generations):
-        scores = [_evaluate(ind, X_train, y_train, X_val, y_val) for ind in population]
+        evaluated = [
+            _evaluate(ind, X_train, y_train, X_val, y_val) for ind in population
+        ]
+        scores = [e[0] for e in evaluated]
+        anns = [e[1] for e in evaluated]
+
+        top_idx = scores.index(max(scores))
+        if scores[top_idx] > best_score:
+            best_score = scores[top_idx]
+            best_hp = population[top_idx]
+            best_ann = anns[top_idx]
+
         # Sort individuals by fitness (descending F1).
-        population = [pop for _, pop in sorted(zip(scores, population), key=lambda p: p[0], reverse=True)]
+        population = [
+            pop for _, pop in sorted(zip(scores, population), key=lambda p: p[0], reverse=True)
+        ]
         # Elitism: carry over the two best individuals unchanged.
         new_population: List[HyperParameters] = population[:2]
 
@@ -103,8 +132,16 @@ def genetic_search(X: torch.Tensor, y: torch.Tensor, generations: int = 5,
 
         population = new_population
 
-    # Final evaluation to select the best individual from the last generation.
-    scores = [_evaluate(ind, X_train, y_train, X_val, y_val) for ind in population]
-    best = population[scores.index(max(scores))]
-    return best
+    # Final evaluation to consider the last generation.
+    evaluated = [
+        _evaluate(ind, X_train, y_train, X_val, y_val) for ind in population
+    ]
+    scores = [e[0] for e in evaluated]
+    anns = [e[1] for e in evaluated]
+    top_idx = scores.index(max(scores))
+    if scores[top_idx] > best_score:
+        best_hp = population[top_idx]
+        best_ann = anns[top_idx]
+
+    return best_hp, best_ann
 

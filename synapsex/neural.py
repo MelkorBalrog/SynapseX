@@ -96,18 +96,27 @@ class PyTorchANN:
         f1 = float(2 * precision * recall / (precision + recall + 1e-8))
         return {"accuracy": accuracy, "precision": precision, "recall": recall, "f1": f1}
 
-    def tune_hyperparameters_ga(self, X: torch.Tensor, y: torch.Tensor, *, generations: int = 5,
-                                population_size: int = 8) -> None:
-        """Use a genetic algorithm to tune the underlying hyper-parameters.
+    def tune_hyperparameters_ga(
+        self,
+        X: torch.Tensor,
+        y: torch.Tensor,
+        *,
+        generations: int = 5,
+        population_size: int = 8,
+    ) -> None:
+        """Use a genetic algorithm and adopt the best performing network.
 
-        The best configuration according to F1 score is loaded into this
-        instance's model."""
+        The search returns both the strongest ``PyTorchANN`` instance and its
+        hyper-parameters so that the selected model—with the lowest false
+        positives and false negatives—becomes this wrapper's active network."""
 
         from .genetic import genetic_search
 
-        best_hp = genetic_search(X, y, generations=generations, population_size=population_size)
+        best_hp, best_ann = genetic_search(
+            X, y, generations=generations, population_size=population_size
+        )
         self.hp = best_hp
-        self.model = TransformerClassifier(self.hp.image_size, num_classes=3, dropout=self.hp.dropout)
+        self.model = best_ann.model
 
     def save(self, path: str) -> None:
         torch.save(self.model.state_dict(), path)
