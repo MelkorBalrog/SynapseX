@@ -6,18 +6,32 @@ from torch import nn
 class TransformerClassifier(nn.Module):
     """Simple transformer-based classifier used by SynapseX."""
 
-    def __init__(self, image_size: int, num_classes: int = 3, dropout: float = 0.2):
+    def __init__(
+        self,
+        image_size: int,
+        num_classes: int = 3,
+        dropout: float = 0.2,
+        *,
+        num_layers: int = 2,
+        nhead: int = 4,
+    ):
         super().__init__()
         patch_size = max(image_size // 4, 1)
         self.patch_size = patch_size
         embed_dim = patch_size * patch_size
+        if embed_dim % nhead != 0:
+            for candidate in range(nhead, 0, -1):
+                if embed_dim % candidate == 0:
+                    nhead = candidate
+                    break
+        self.nhead = nhead
         self.patch_embed = nn.Conv2d(1, embed_dim, kernel_size=patch_size, stride=patch_size)
         n_patches = (image_size // patch_size) ** 2
         # Positional embeddings for each patch
         self.pos_embed = nn.Parameter(torch.zeros(n_patches, embed_dim))
         nn.init.normal_(self.pos_embed, std=0.02)
-        encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=4, dropout=dropout)
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=2)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=self.nhead, dropout=dropout)
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.dropout = nn.Dropout(dropout)
         self.head = nn.Linear(n_patches * embed_dim, num_classes)
 
