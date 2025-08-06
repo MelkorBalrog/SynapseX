@@ -14,7 +14,11 @@ hand-written characters.
 - **Training and inference.** Neural networks can be trained on a directory of
   labelled images or used to classify a single image from the command line.
 - **Evaluation metrics.** Training curves track loss, accuracy, precision,
-  recall and F1 while a confusion matrix visualises classification results.
+  recall and F1 while a confusion matrix visualises classification results for
+  any number of classes.
+ - **Validation-based early stopping.** Training monitors a held-out validation
+   split, restoring the best model weights to avoid the "stuck at one class"
+   behaviour and improve overall metrics.
 
 ## Getting Started
 
@@ -237,6 +241,22 @@ metrics—accuracy, precision, recall and F1—alongside the loss for each epoch
 After inference a confusion matrix is printed and plotted to highlight
 misclassified examples.
 
+## Hyper-parameter Optimisation
+
+To squeeze out extra accuracy, recall, precision and F1 score the training
+helpers incorporate a couple of classic optimisation strategies:
+
+- **Early stopping** halts training when the F1 score fails to improve for a few
+  epochs, reducing the risk of overfitting.
+- **Genetic algorithms** explore different dropout, learning-rate and
+  architectural choices (transformer depth and attention heads) and retain the
+  best scoring network to curb false positives and negatives.  The compact
+  implementation lives in `synapsex/genetic.py` and can be invoked via
+  `PyTorchANN.tune_hyperparameters_ga` before calling `train`.
+
+Trained checkpoints persist the selected hyper-parameters so classification code
+can recreate the exact network structure discovered by the search.
+
 ## Assembly Instructions
 
 SynapseX understands a tiny instruction set sufficient for the demos:
@@ -249,7 +269,15 @@ SynapseX understands a tiny instruction set sufficient for the demos:
 | `BEQ rs, rt, label` | branch if equal |
 | `BGT rs, rt, label` | branch if greater than |
 | `J label` | jump to label |
-| `OP_NEUR <cmd>` | issue neural‑network command (e.g. `TRAIN_ANN`, `INFER_ANN`) |
+| `OP_NEUR <cmd>` | issue neural‑network command (e.g. `TUNE_GA`, `TRAIN_ANN`, `INFER_ANN`) |
+
+The neural helper commands accept a few parameters to expose training
+hyper‑parameters.  `CONFIG_ANN <id> FINALIZE <dropout>` sets the
+network‑wide dropout rate before the ANN instance is created.  `TUNE_GA <id>
+<generations> <population>` runs a small genetic algorithm to search for the
+best performing network structure and learning rate.  During training
+`TRAIN_ANN <id> <epochs> <lr> <batch>` runs optimisation for the given number
+of epochs using the specified learning rate and batch size.
 
 ## Execution Flow
 
