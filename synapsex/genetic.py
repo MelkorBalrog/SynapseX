@@ -5,13 +5,14 @@ small space of ``HyperParameters`` in order to maximise the F1 score of a
 ``PyTorchANN`` model.  It is intentionally minimal and dependency free so it
 can run in constrained environments.
 
-The search space currently covers the dropout rate and learning rate, two
-hyper‑parameters that strongly influence classification metrics such as
-accuracy, recall and precision.  Each individual in the population represents a
-unique combination of these parameters.  Individuals are evaluated by training a
-model for a few epochs and scoring it on a held‑out validation set.  The best
-performing network and its parameters are returned so the strongest candidate is
-not lost to random re‑initialisation.
+The search space currently covers the dropout rate, learning rate and structural
+parameters such as the number of transformer layers and attention heads.  These
+choices strongly influence classification metrics like accuracy, recall and
+precision.  Each individual in the population represents a unique combination of
+these parameters.  Individuals are evaluated by training a model for a few
+epochs and scoring it on a held‑out validation set.  The best performing network
+and its parameters are returned so the strongest candidate is not lost to random
+re‑initialisation.
 
 The algorithm is purposely small so that projects can quickly experiment with
 genetic optimisation without pulling in heavy third‑party libraries.
@@ -38,6 +39,8 @@ def _random_hyperparameters() -> HyperParameters:
         epochs=max(2, hp.epochs // 2),
         batch_size=hp.batch_size,
         mc_dropout_passes=hp.mc_dropout_passes,
+        num_layers=random.randint(1, 4),
+        nhead=random.choice([2, 4, 8]),
     )
 
 
@@ -120,14 +123,27 @@ def genetic_search(
             parent1, parent2 = random.sample(population[:4], 2)
             child_dropout = (parent1.dropout + parent2.dropout) / 2
             child_lr = (parent1.learning_rate + parent2.learning_rate) / 2
+            child_layers = random.choice([parent1.num_layers, parent2.num_layers])
+            child_heads = random.choice([parent1.nhead, parent2.nhead])
 
-            # Mutation – small random perturbations.
+            # Mutation – small random perturbations / discrete jumps.
             child_dropout += random.uniform(-0.05, 0.05)
             child_dropout = min(max(child_dropout, 0.05), 0.6)
             child_lr *= 10 ** random.uniform(-0.5, 0.5)
             child_lr = min(max(child_lr, 1e-4), 1e-2)
+            if random.random() < 0.3:
+                child_layers += random.choice([-1, 1])
+            child_layers = min(max(child_layers, 1), 4)
+            if random.random() < 0.3:
+                child_heads = random.choice([2, 4, 8])
 
-            child = replace(parent1, dropout=child_dropout, learning_rate=child_lr)
+            child = replace(
+                parent1,
+                dropout=child_dropout,
+                learning_rate=child_lr,
+                num_layers=child_layers,
+                nhead=child_heads,
+            )
             new_population.append(child)
 
         population = new_population

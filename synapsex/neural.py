@@ -22,7 +22,13 @@ class PyTorchANN:
 
     def __init__(self, hp_override: Optional[HyperParameters] = None):
         self.hp = hp_override or hp
-        self.model = TransformerClassifier(self.hp.image_size, num_classes=3, dropout=self.hp.dropout)
+        self.model = TransformerClassifier(
+            self.hp.image_size,
+            num_classes=3,
+            dropout=self.hp.dropout,
+            num_layers=self.hp.num_layers,
+            nhead=self.hp.nhead,
+        )
 
     def train(self, X: torch.Tensor, y: torch.Tensor, *, patience: int = 2) -> Dict[str, float]:
         """Train the network and return evaluation metrics.
@@ -96,6 +102,11 @@ class PyTorchANN:
         f1 = float(2 * precision * recall / (precision + recall + 1e-8))
         return {"accuracy": accuracy, "precision": precision, "recall": recall, "f1": f1}
 
+    def architecture(self) -> Dict[str, int]:
+        """Return a dictionary describing the ANN structure."""
+
+        return {"num_layers": self.hp.num_layers, "nhead": self.hp.nhead}
+
     def tune_hyperparameters_ga(
         self,
         X: torch.Tensor,
@@ -119,12 +130,32 @@ class PyTorchANN:
         self.model = best_ann.model
 
     def save(self, path: str) -> None:
-        torch.save(self.model.state_dict(), path)
+        torch.save({"state_dict": self.model.state_dict(), "hp": self.hp.__dict__}, path)
 
     def load(self, path: str) -> None:
         state = torch.load(path, map_location="cpu")
-        # Allow loading models saved without positional embeddings
-        self.model.load_state_dict(state, strict=False)
+        if isinstance(state, dict) and "state_dict" in state:
+            hp_dict = state.get("hp")
+            if hp_dict:
+                self.hp = HyperParameters(**hp_dict)
+            self.model = TransformerClassifier(
+                self.hp.image_size,
+                num_classes=3,
+                dropout=self.hp.dropout,
+                num_layers=self.hp.num_layers,
+                nhead=self.hp.nhead,
+            )
+            # Allow loading models saved without positional embeddings
+            self.model.load_state_dict(state["state_dict"], strict=False)
+        else:
+            self.model = TransformerClassifier(
+                self.hp.image_size,
+                num_classes=3,
+                dropout=self.hp.dropout,
+                num_layers=self.hp.num_layers,
+                nhead=self.hp.nhead,
+            )
+            self.model.load_state_dict(state, strict=False)
 
 
 class RedundantNeuralIP:
