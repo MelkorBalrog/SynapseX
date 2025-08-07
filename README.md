@@ -44,6 +44,8 @@ hand-written characters.
   transformer depth to squeeze out better accuracy, recall, precision and F1.
 - **Target-metrics training.** Optimisation halts when validation F1 stalls,
   preserving the model state that achieved the strongest score.
+- **Project export.** Trained ANNs, metrics and figures can be bundled into a
+  JSON manifest that references per-network weight files for easy sharing.
 
 ## Getting Started
 

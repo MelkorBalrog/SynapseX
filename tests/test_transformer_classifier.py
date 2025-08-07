@@ -29,6 +29,8 @@ from synapsex.models import TransformerClassifier
 
 @pytest.mark.skipif(shutil.which("iverilog") is None, reason="iverilog not installed")
 def test_transformer_classifier_hw_match():
+    if shutil.which("iverilog") is None or shutil.which("vvp") is None:
+        pytest.skip("iverilog not installed")
     model = TransformerClassifier(image_size=8, num_classes=3, dropout=0.0)
     for p in model.parameters():
         torch.nn.init.constant_(p, 0.0)
