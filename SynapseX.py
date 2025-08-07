@@ -332,22 +332,11 @@ def main() -> None:
         if len(sys.argv) < 3:
             print("Usage: python SynapseX.py classify path/to/image.png")
             return
-        image_path = Path(sys.argv[2])
-        if not image_path.is_file():
-            print(f"Image '{image_path}' not found.")
-            return
         soc = SoC()
-        processed_dir = Path.cwd() / "processed"
-        processed = load_process_shape_image(str(image_path), out_dir=processed_dir, angles=[0])[0]
-        base_addr = 0x5000
-        for i, val in enumerate(processed):
-            word = np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
-            soc.memory.write(base_addr + i, int(word))
         asm_lines = load_asm_file(Path("asm") / "classification.asm")
         soc.load_assembly(asm_lines)
         soc.run(max_steps=3000)
-        result = soc.cpu.get_reg("$t9")
-        print(f"\nClassification Phase Completed!\nPredicted class: {result}")
+        print("\nClassification Phase Completed!")
     else:
         print("Unknown mode. Use 'train', 'classify' or 'gui'.")
 

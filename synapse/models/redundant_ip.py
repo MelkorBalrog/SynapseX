@@ -98,11 +98,7 @@ class RedundantNeuralIP:
 
         # Update only the epoch count; GA-tuned learning rate and batch size are preserved
         ann.hp = replace(ann.hp, epochs=epochs)
-        metrics, figs = ann.train(
-            torch.from_numpy(X), torch.from_numpy(y), show_plots=self.show_plots
-        )
-        self.last_figures = figs
-        print(f"ANN {ann_id} metrics: {metrics}")
+        ann.train(torch.from_numpy(X), torch.from_numpy(y))
 
     # ------------------------------------------------------------------
     # INFER_ANN helpers
