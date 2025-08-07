@@ -23,7 +23,11 @@ import torch
 from PIL import Image
 
 sys.path.append(os.getcwd())
-from synapsex.image_processing import load_process_shape_image, load_annotated_dataset
+from synapsex.image_processing import (
+    load_process_shape_image,
+    load_annotated_dataset,
+    load_process_vehicle_image,
+)
 
 def test_load_process_shape_image_angle_control(tmp_path):
     img = Image.fromarray(np.zeros((10, 10), dtype=np.uint8))
