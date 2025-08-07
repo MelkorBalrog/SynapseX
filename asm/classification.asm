@@ -19,79 +19,72 @@
 OP_NEUR CONFIG_ANN 0 FINALIZE 0.2
 OP_NEUR CONFIG_ANN 1 FINALIZE 0.2
 OP_NEUR CONFIG_ANN 2 FINALIZE 0.2
+
+; (A1) Load class count from configuration so assembly and Python agree
+OP_NEUR GET_NUM_CLASSES
+ADD $s0, $zero, $t9            ; $s0 holds hp.num_classes
+
 ; (B) Load All Trained Weights for Classification
 OP_NEUR LOAD_ALL trained_weights
-; (C) Perform Inference on the 3 Principal ANNs
+
+; (C) Perform Inference on the 3 Principal ANNs and fetch argmax directly
 OP_NEUR INFER_ANN 0 true 10
-ADD $t0, $zero, $t9
+OP_NEUR GET_ARGMAX 0
+SW $t9, ann_preds              ; store ANN0 prediction
 OP_NEUR INFER_ANN 1 true 10
-ADD $t1, $zero, $t9
+OP_NEUR GET_ARGMAX 1
+SW $t9, ann_preds+4            ; store ANN1 prediction
 OP_NEUR INFER_ANN 2 true 10
-ADD $t2, $zero, $t9
-; (D) Manual Majority Voting Among the 3 ANNs
-ADDI $t10, $zero, 0
-ADDI $t11, $zero, 0
-ADDI $t12, $zero, 0
-BEQ $t0, $zero, ann0_isA
-ADDI $at, $zero, 1
-BEQ $t0, $at, ann0_isB
-J ann0_isU
-ann0_isA:
-ADDI $t10, $t10, 1
-J ann0_done
-ann0_isB:
-ADDI $t11, $t11, 1
-J ann0_done
-ann0_isU:
-ADDI $t12, $t12, 1
-J ann0_done
-ann0_done:
-BEQ $t1, $zero, ann1_isA
-ADDI $at, $zero, 1
-BEQ $t1, $at, ann1_isB
-J ann1_isU
-ann1_isA:
-ADDI $t10, $t10, 1
-J ann1_done
-ann1_isB:
-ADDI $t11, $t11, 1
-J ann1_done
-ann1_isU:
-ADDI $t12, $t12, 1
-J ann1_done
-ann1_done:
-BEQ $t2, $zero, ann2_isA
-ADDI $at, $zero, 1
-BEQ $t2, $at, ann2_isB
-J ann2_isU
-ann2_isA:
-ADDI $t10, $t10, 1
-J ann2_done
-ann2_isB:
-ADDI $t11, $t11, 1
-J ann2_done
-ann2_isU:
-ADDI $t12, $t12, 1
-J ann2_done
-ann2_done:
-; (E) Decide Final Class based on Majority Vote
-BGT $t10, $t11, checkA_vsU
-BGT $t11, $t10, checkB_vsU
-ADDI $t9, $zero, 2
-J finalize_output
-checkA_vsU:
-BGT $t10, $t12, finalizeA
-ADDI $t9, $zero, 2
-J finalize_output
-checkB_vsU:
-BGT $t11, $t12, finalizeB
-ADDI $t9, $zero, 2
-J finalize_output
-finalizeA:
-ADDI $t9, $zero, 0           ; Class A selected – display a green indicator
-J finalize_output
-finalizeB:
-ADDI $t9, $zero, 1           ; Class B selected – no green indicator
+OP_NEUR GET_ARGMAX 2
+SW $t9, ann_preds+8            ; store ANN2 prediction
+
+; (D) Majority voting for all classes using loop based on hp.num_classes
+ADDI $t0, $zero, 0             ; index for vote initialisation
+init_votes:
+BEQ $t0, $s0, votes_inited
+SLL $t1, $t0, 2                ; offset = i * 4
+SW $zero, votes($t1)
+ADDI $t0, $t0, 1
+J init_votes
+votes_inited:
+
+ADDI $t0, $zero, 0             ; iterate over ANN predictions
+ADDI $t2, $zero, 3             ; number of ANNs (fixed)
+count_loop:
+BEQ $t0, $t2, count_done
+SLL $t1, $t0, 2
+LW $t3, ann_preds($t1)
+SLL $t4, $t3, 2                ; vote index
+LW $t5, votes($t4)
+ADDI $t5, $t5, 1
+SW $t5, votes($t4)
+ADDI $t0, $t0, 1
+J count_loop
+count_done:
+
+; (E) Select class with highest vote
+ADDI $t0, $zero, 0             ; class index
+ADDI $t6, $zero, -1            ; max vote count
+ADDI $t9, $zero, 0             ; predicted class
+max_loop:
+BEQ $t0, $s0, finalize_output
+SLL $t1, $t0, 2
+LW $t3, votes($t1)
+BGT $t3, $t6, update_max
+ADDI $t0, $t0, 1
+J max_loop
+update_max:
+ADD $t6, $t3, $zero
+ADD $t9, $t0, $zero
+ADDI $t0, $t0, 1
+J max_loop
+
 finalize_output:
-; Final result is in $t9. Use green color when class A is predicted.
+; Final result is in $t9. Use green color when class 0 is predicted.
 HALT
+
+.data
+votes:
+    .space 64                   ; vote counts for each class (>= hp.num_classes)
+ann_preds:
+    .space 12                   ; argmax results from the three ANNs
