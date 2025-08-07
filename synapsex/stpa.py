@@ -28,19 +28,6 @@ class ControlFlowDiagram:
 
     control_actions: Iterable[str] = field(default_factory=list)
 
-    def __post_init__(self) -> None:
-        """Materialise ``control_actions`` into a list.
-
-        ``control_actions`` may be provided as any iterable, including
-        generators.  Generators are exhausted after a single iteration which
-        would previously result in subsequent calls to
-        :meth:`get_control_actions` returning an empty list.  By eagerly
-        converting the iterable to a list we ensure that the available control
-        actions remain accessible for the lifetime of the diagram.
-        """
-
-        self.control_actions = list(self.control_actions)
-
     def get_control_actions(self) -> List[str]:
         """Return control actions defined by the diagram."""
         return list(self.control_actions)
