@@ -262,11 +262,15 @@ class SynapseXGUI(tk.Tk):
         sub_nb.add(frame, text=f"Run {len(sub_nb.tabs())+1}")
 
         img_arr = (processed.reshape(28, 28) * 255).astype(np.uint8)
-        proc_photo = ImageTk.PhotoImage(Image.fromarray(img_arr))
-        img_lbl = ttk.Label(sub_nb, image=proc_photo)
-        img_lbl.image = proc_photo
-        self._figure_images.append(proc_photo)
-        sub_nb.add(img_lbl, text="Processed")
+        try:
+            proc_photo = ImageTk.PhotoImage(Image.fromarray(img_arr))
+        except tk.TclError:
+            proc_photo = None
+        if proc_photo is not None:
+            img_lbl = ttk.Label(sub_nb, image=proc_photo)
+            img_lbl.image = proc_photo
+            self._figure_images.setdefault("Classification", []).append(proc_photo)
+            sub_nb.add(img_lbl, text="Processed")
 
         sub_nb.select(frame)
         self.results_nb.select(sub_nb)
@@ -390,7 +394,11 @@ class SynapseXGUI(tk.Tk):
                 fig.savefig(buf_img, format="png")
                 buf_img.seek(0)
                 image = Image.open(buf_img)
-                photo = ImageTk.PhotoImage(image)
+                try:
+                    photo = ImageTk.PhotoImage(image)
+                except tk.TclError:
+                    plt.close(fig)
+                    continue
 
                 frame = ttk.Frame(ann_nb)
                 canvas = tk.Canvas(frame, width=min(800, image.width), height=min(600, image.height))
@@ -417,7 +425,11 @@ class SynapseXGUI(tk.Tk):
 
 def main() -> None:
     if len(sys.argv) == 1 or sys.argv[1].lower() == "gui":
-        gui = SynapseXGUI()
+        try:
+            gui = SynapseXGUI()
+        except tk.TclError as exc:
+            print(f"GUI unavailable: {exc}")
+            return
         gui.mainloop()
         return
 
