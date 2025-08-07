@@ -97,9 +97,11 @@ class SynapseXGUI(tk.Tk):
         style = ttk.Style(self)
         style.theme_use("clam")
         self.current_asm_path: Path | None = None
-        self.dark_mode = False
+        self.dark_mode = True
         self._build_menu()
         self._build_ui()
+        self._set_dark_mode(self.dark_mode)
+        self.dark_mode_btn.config(text="Light Mode")
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self)
@@ -213,7 +215,7 @@ class SynapseXGUI(tk.Tk):
             bg = "#1e1e1e"
             fg = "#d4d4d4"
             instr = "#569CD6"
-            number = "#B5CEA8"
+            number = "#FF00FF"
             comment = "#6A9955"
         else:
             bg = "white"
