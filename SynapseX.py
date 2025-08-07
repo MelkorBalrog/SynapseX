@@ -416,8 +416,8 @@ class SynapseXGUI(tk.Tk):
         except tk.TclError as exc:
             buf.write(f"\nTk error: {exc}\n")
         out = buf.getvalue()
-        if soc.neural_ip.last_result is not None:
-            out += f"\nPredicted class: {soc.neural_ip.last_result}\n"
+        result = soc.cpu.get_reg("$t9")
+        out += f"\nPredicted class: {result}\n"
         net_name = asm_path.stem
         if net_name not in self.network_tabs:
             sub_nb = ScrollableNotebook(self.results_nb)
