@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Management of multiple ANNs with majority voting.
+"""Management of multiple ANNs for assembly-driven majority voting.
 
 The instruction processor mirrors the behaviour expected by the assembly
 programs.  It now delegates work to :class:`synapsex.neural.PyTorchANN`
@@ -25,7 +25,6 @@ invoked directly from assembly via new ``TUNE_GA`` commands.
 
 from __future__ import annotations
 
-from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 from typing import Dict, List
@@ -50,6 +49,8 @@ class RedundantNeuralIP:
     def __init__(self, train_data_dir: str | None = None) -> None:
         self.ann_map: Dict[int, PyTorchANN] = {}
         self.last_result: int | None = None
+        self._argmax: Dict[int, int] = {}
+        self.vote_history: List[int] = []
         self.train_data_dir = train_data_dir
         self._cached_dataset: tuple[torch.Tensor, torch.Tensor] | None = None
         # Metrics and figures generated during training keyed by ANN ID
@@ -59,11 +60,12 @@ class RedundantNeuralIP:
     # ------------------------------------------------------------------
     # Assembly interface
     # ------------------------------------------------------------------
-    def run_instruction(self, subcmd: str, memory=None) -> None:
+    def run_instruction(self, subcmd: str, memory=None) -> int | None:
         """Parse and execute an ``OP_NEUR`` instruction."""
         tokens = subcmd.strip().split()
         if not tokens:
-            return
+            return None
+        result: int | None = None
         op = tokens[0].upper()
         if op == "CONFIG_ANN":
             self._config_ann(tokens[1:])
@@ -72,7 +74,13 @@ class RedundantNeuralIP:
         elif op == "TRAIN_ANN":
             self._train_ann(tokens[1:])
         elif op == "INFER_ANN":
-            self._infer_ann(tokens[1:], memory)
+            result = self._infer_ann(tokens[1:], memory)
+        elif op == "GET_NUM_CLASSES":
+            result = hp.num_classes
+        elif op == "GET_ARGMAX":
+            if len(tokens) > 1:
+                ann_id = int(tokens[1])
+                result = self._argmax.get(ann_id, 0)
         elif op == "SAVE_ALL":
             prefix = tokens[1] if len(tokens) > 1 else "weights"
             for ann_id, ann in self.ann_map.items():
@@ -88,6 +96,8 @@ class RedundantNeuralIP:
             json_path = tokens[1] if len(tokens) > 1 else "project.json"
             prefix = tokens[2] if len(tokens) > 2 else "weights"
             self.save_project(json_path, prefix)
+        self.last_result = None
+        return result
 
     # ------------------------------------------------------------------
     # Persistence helpers
@@ -133,6 +143,8 @@ class RedundantNeuralIP:
         cmd = tokens[1]
         # Legacy layer instructions are ignored; only FINALIZE is required to create the ANN
         if cmd == "FINALIZE":
+            if self.train_data_dir:
+                self._load_dataset()
             dropout = float(tokens[2]) if len(tokens) >= 3 else hp.dropout
             hparams = HyperParameters(**{**hp.__dict__, "dropout": dropout})
             self.ann_map[ann_id] = PyTorchANN(hparams)
@@ -186,8 +198,11 @@ class RedundantNeuralIP:
             torch.from_numpy(X),
             mc_dropout=len(tokens) > 1 and tokens[1].lower() == "true",
         )
-        self.last_result = int(probs.argmax(dim=1)[0])
-        print(f"ANN {ann_id} prediction: {self.last_result}")
+        result = int(probs.argmax(dim=1)[0])
+        self._argmax[ann_id] = result
+        self.vote_history.append(result)
+        print(f"ANN {ann_id} prediction: {result}")
+        return result
 
     # ------------------------------------------------------------------
     # TUNE_GA helpers
@@ -213,21 +228,6 @@ class RedundantNeuralIP:
         self.ann_map[ann_id] = best_ann
 
     # ------------------------------------------------------------------
-    # Utility
-    # ------------------------------------------------------------------
-    def predict_majority(self, X: np.ndarray):
-        preds = {}
-        for ann_id, ann in self.ann_map.items():
-            probs = ann.predict(torch.from_numpy(X))
-            preds[ann_id] = probs.argmax(dim=1).cpu().numpy()
-
-        # ``Counter`` struggles with NumPy scalar types, so convert each vote to
-        # a native ``int`` before tallying the results.
-        votes = [int(preds[ann_id][0]) for ann_id in self.ann_map]
-        majority = int(Counter(votes).most_common(1)[0][0]) if votes else None
-        return majority, preds
-
-    # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
     def _load_dataset(self):
@@ -244,6 +244,7 @@ class RedundantNeuralIP:
             else:
                 X = torch.from_numpy(np.load(data_path).astype(np.float32))
                 y = torch.from_numpy(np.load(labels_path).astype(np.int64))
+            hp.num_classes = int(torch.unique(y).numel())
             self._cached_dataset = (X, y)
         return self._cached_dataset
 

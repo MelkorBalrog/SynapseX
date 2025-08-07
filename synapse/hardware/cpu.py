@@ -39,10 +39,14 @@ class CPU:
         self.regs["$t9"] = 0
         self.regs["$at"] = 0
         self.label_map = {}
+        self.data_map = {}
 
     # ------------------------------------------------------------------
     def set_label_map(self, label_map):
         self.label_map = label_map
+
+    def set_data_map(self, data_map):
+        self.data_map = data_map
 
     def get_reg(self, r):
         return self.regs.get(r, 0)
@@ -91,14 +95,47 @@ class CPU:
             rs = parts[1].rstrip(",")
             rt = parts[2].rstrip(",")
             label = parts[3]
-            if self.get_reg(rs) > self.get_reg(rt):
+            if self._to_signed(self.get_reg(rs)) > self._to_signed(self.get_reg(rt)):
                 self.pc = self.label_map.get(label, self.pc)
         elif instr == "J":
             label = parts[1]
             self.pc = self.label_map.get(label, self.pc)
+        elif instr == "SLL":
+            rd = parts[1].rstrip(",")
+            rt = parts[2].rstrip(",")
+            sa = int(parts[3], 0)
+            self.set_reg(rd, (self.get_reg(rt) << sa) & 0xFFFFFFFF)
+        elif instr == "LW":
+            rt = parts[1].rstrip(",")
+            addr_token = parts[2]
+            addr = self._resolve_addr(addr_token) // 4
+            self.set_reg(rt, self.memory.read(addr))
+        elif instr == "SW":
+            rt = parts[1].rstrip(",")
+            addr_token = parts[2]
+            addr = self._resolve_addr(addr_token) // 4
+            self.memory.write(addr, self.get_reg(rt))
         elif instr == "OP_NEUR":
             subcmd = " ".join(parts[1:])
-            self.neural_ip.run_instruction(subcmd, memory=self.memory)
-            if subcmd.upper().startswith("INFER_ANN") and self.neural_ip.last_result is not None:
-                self.set_reg("$t9", int(self.neural_ip.last_result))
+            res = self.neural_ip.run_instruction(subcmd, memory=self.memory)
+            if res is not None:
+                self.set_reg("$t9", int(res))
+
+    def _resolve_addr(self, token: str) -> int:
+        token = token.strip()
+        if token.endswith(")") and "(" in token:
+            base, reg = token[:-1].split("(")
+            addr = self.data_map.get(base, 0)
+            addr += self.get_reg(reg)
+            return addr
+        if "+" in token:
+            label, imm = token.split("+")
+            addr = self.data_map.get(label, 0) + int(imm, 0)
+            return addr
+        if token in self.data_map:
+            return self.data_map[token]
+        return int(token, 0)
+
+    def _to_signed(self, val: int) -> int:
+        return val if val < 0x80000000 else val - 0x100000000
 
