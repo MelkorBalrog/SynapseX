@@ -36,8 +36,8 @@ def _prepare_dataset(tmp_path):
 def test_load_vehicle_dataset(tmp_path):
     _prepare_dataset(tmp_path)
     X, y = load_vehicle_dataset(tmp_path, target_size=8)
-    assert X.shape == (72, 64)
-    assert torch.bincount(y).tolist() == [36, 36]
+    assert X.shape == (144, 64)
+    assert torch.bincount(y).tolist() == [72, 72]
 
 
 def test_load_vehicle_dataset_no_rotate(tmp_path):
