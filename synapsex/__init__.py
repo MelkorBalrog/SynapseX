@@ -15,20 +15,3 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-try:  # optional dependency: torch
-    from .object_detection import Detection, MultiObjectDetector, detect_objects
-except Exception:  # pragma: no cover - executed only when deps missing
-    Detection = MultiObjectDetector = detect_objects = None
-
-from .stpa import ControlFlowDiagram, STPAAnalysis, STPAElement
-from .tools import create_stpa_analysis
-
-__all__ = [
-    "Detection",
-    "MultiObjectDetector",
-    "detect_objects",
-    "ControlFlowDiagram",
-    "STPAAnalysis",
-    "STPAElement",
-    "create_stpa_analysis",
-]

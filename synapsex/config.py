@@ -20,8 +20,6 @@ from dataclasses import dataclass
 @dataclass
 class HyperParameters:
     image_size: int = 28
-    image_channels: int = 1
-    num_classes: int = 3
     dropout: float = 0.2
     learning_rate: float = 1e-3
     epochs: int = 10
@@ -29,9 +27,5 @@ class HyperParameters:
     mc_dropout_passes: int = 10
     num_layers: int = 2
     nhead: int = 4
-    # Object detection hyper-parameters
-    num_anchors: int = 3
-    conf_thresh: float = 0.5
-    iou_thresh: float = 0.5
 
 hp = HyperParameters()

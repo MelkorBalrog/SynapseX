@@ -43,8 +43,7 @@ class VirtualANN(nn.Module):
             if i < len(layer_sizes) - 2:
                 layers.append(nn.LeakyReLU())
                 layers.append(nn.Dropout(dropout_rate))
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.net = nn.Sequential(*layers).to(self.device)
+        self.net = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.net(x)
@@ -59,7 +58,7 @@ class VirtualANN(nn.Module):
         simply call ``fig.show()`` on the returned figures.
         """
         dataset = TensorDataset(torch.from_numpy(X).float(), torch.from_numpy(y).long())
-        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=self.device.type == "cuda")
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         loss_hist, acc_hist, prec_hist, rec_hist, f1_hist = [], [], [], [], []
@@ -72,8 +71,6 @@ class VirtualANN(nn.Module):
             all_preds: list[int] = []
             all_true: list[int] = []
             for xb, yb in loader:
-                xb = xb.to(self.device, non_blocking=True)
-                yb = yb.to(self.device, non_blocking=True)
                 optimizer.zero_grad()
                 preds = self(xb)
                 loss = criterion(preds, yb)
@@ -128,13 +125,13 @@ class VirtualANN(nn.Module):
     def predict(self, X: np.ndarray):
         self.eval()
         with torch.no_grad():
-            logits = self(torch.from_numpy(X).float().to(self.device))
+            logits = self(torch.from_numpy(X).float())
             return torch.argmax(logits, dim=1).cpu().numpy()
 
     def predict_with_uncertainty(self, X: np.ndarray, mc_passes: int = 10):
         self.train()  # enable dropout at inference
         outputs = []
-        inp = torch.from_numpy(X).float().to(self.device)
+        inp = torch.from_numpy(X).float()
         for _ in range(mc_passes):
             outputs.append(self(inp).detach().cpu().numpy())
         mean = np.mean(outputs, axis=0)
@@ -214,10 +211,10 @@ class VirtualANN(nn.Module):
 
     # Persistence helpers -------------------------------------------------
     def save(self, path: str):
-        torch.save({k: v.cpu() for k, v in self.state_dict().items()}, path)
+        torch.save(self.state_dict(), path)
 
     def load(self, path: str):
-        self.load_state_dict(torch.load(path, map_location=self.device))
+        self.load_state_dict(torch.load(path))
 
 
 class TransformerClassifier(nn.Module):
@@ -257,19 +254,16 @@ class PyTorchANN:
         nhead: int = 4,
         num_layers: int = 1,
     ):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = TransformerClassifier(input_dim, num_classes, dropout, nhead, num_layers).to(self.device)
+        self.model = TransformerClassifier(input_dim, num_classes, dropout, nhead, num_layers)
 
     def train_model(self, X: np.ndarray, y: np.ndarray, epochs: int, lr: float, batch_size: int):
         dataset = TensorDataset(torch.from_numpy(X).float(), torch.from_numpy(y).long())
-        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=self.device.type == "cuda")
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
         self.model.train()
         for _ in range(epochs):
             for xb, yb in loader:
-                xb = xb.to(self.device, non_blocking=True)
-                yb = yb.to(self.device, non_blocking=True)
                 optimizer.zero_grad()
                 preds = self.model(xb)
                 loss = criterion(preds, yb)
@@ -279,13 +273,13 @@ class PyTorchANN:
     def predict(self, X: np.ndarray):
         self.model.eval()
         with torch.no_grad():
-            logits = self.model(torch.from_numpy(X).float().to(self.device))
+            logits = self.model(torch.from_numpy(X).float())
             return torch.argmax(logits, dim=1).cpu().numpy()
 
     def predict_with_uncertainty(self, X: np.ndarray, mc_passes: int = 10):
         self.model.train()  # enable dropout at inference
         outputs = []
-        inp = torch.from_numpy(X).float().to(self.device)
+        inp = torch.from_numpy(X).float()
         for _ in range(mc_passes):
             outputs.append(self.model(inp).detach().cpu().numpy())
         mean = np.mean(outputs, axis=0)
@@ -293,7 +287,7 @@ class PyTorchANN:
         return mean, var
 
     def save(self, path: str):
-        torch.save({k: v.cpu() for k, v in self.model.state_dict().items()}, path)
+        torch.save(self.model.state_dict(), path)
 
     def load(self, path: str):
-        self.model.load_state_dict(torch.load(path, map_location=self.device))
+        self.model.load_state_dict(torch.load(path))

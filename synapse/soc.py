@@ -34,7 +34,6 @@ class SoC:
         self.cpu = CPU("CPU1", self.video_ip, self.neural_ip, self.memory, self.mmu)
         self.asm_program = []
         self.label_map = {}
-        self.data_map = {}
 
     # ------------------------------------------------------------------
     def load_assembly(self, lines):
@@ -44,25 +43,11 @@ class SoC:
 
     def _preprocess_labels(self):
         self.label_map = {}
-        self.data_map = {}
-        data_mode = False
-        data_addr = 0
         for idx, line in enumerate(self.asm_program):
             stripped = line.strip()
-            if stripped == ".data":
-                data_mode = True
-                continue
             if stripped.endswith(":"):
-                label = stripped[:-1]
-                self.label_map[label] = idx
-                if data_mode and idx + 1 < len(self.asm_program):
-                    next_line = self.asm_program[idx + 1].strip()
-                    if next_line.startswith(".space"):
-                        size = int(next_line.split()[1])
-                        self.data_map[label] = data_addr
-                        data_addr += size
+                self.label_map[stripped[:-1]] = idx
         self.cpu.set_label_map(self.label_map)
-        self.cpu.set_data_map(self.data_map)
 
     # ------------------------------------------------------------------
     def run(self, max_steps=100):

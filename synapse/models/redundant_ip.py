@@ -29,7 +29,6 @@ from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 from typing import Dict, List
-import json
 
 import matplotlib
 matplotlib.use("Agg")
@@ -41,7 +40,7 @@ import torch
 from synapsex.config import HyperParameters, hp
 from synapsex.genetic import genetic_search
 from synapsex.neural import PyTorchANN
-from synapsex.image_processing import load_vehicle_dataset
+from synapsex.image_processing import load_process_shape_image
 
 
 class RedundantNeuralIP:
@@ -51,16 +50,10 @@ class RedundantNeuralIP:
         self.ann_map: Dict[int, PyTorchANN] = {}
         self.last_result: int | None = None
         self.train_data_dir = train_data_dir
-        self._cached_dataset: tuple[torch.Tensor, torch.Tensor] | None = None
+        self._cached_dataset: tuple[np.ndarray, np.ndarray] | None = None
         # Metrics and figures generated during training keyed by ANN ID
         self.metrics_by_ann: Dict[int, Dict[str, float]] = {}
         self.figures_by_ann: Dict[int, List] = {}
-        # History of predictions for majority voting or debugging
-        self.vote_history: List[int] = []
-        # Mapping from class index to folder name
-        self.class_names: List[str] = []
-        # Cached argmax per ANN from the last inference
-        self._argmax: Dict[int, int] = {}
 
     # ------------------------------------------------------------------
     # Assembly interface
@@ -90,91 +83,6 @@ class RedundantNeuralIP:
                     ann.load(f"{prefix}_{ann_id}.pt")
                 except FileNotFoundError:
                     pass
-        elif op == "SAVE_PROJECT":
-            json_path = tokens[1] if len(tokens) > 1 else "project.json"
-            prefix = tokens[2] if len(tokens) > 2 else "weights"
-            self.save_project(json_path, prefix)
-        elif op == "GET_NUM_CLASSES":
-            self.last_result = hp.num_classes or len(self.class_names)
-        elif op == "GET_ARGMAX":
-            if len(tokens) > 1:
-                ann_id = int(tokens[1])
-                self.last_result = self._argmax.get(ann_id)
-            else:
-                self.last_result = None
-
-    # ------------------------------------------------------------------
-    # Persistence helpers
-    # ------------------------------------------------------------------
-    def save_project(self, json_path: str, weight_prefix: str = "weights") -> None:
-        """Serialise all ANNs, metrics and figures to ``json_path``.
-
-        The network weights remain in individual ``.pt`` files referenced by the
-        generated JSON so that large binary blobs do not bloat the manifest. Any
-        training figures are saved as PNG images and likewise referenced.
-        """
-
-        base = Path(json_path).resolve().parent
-        project: Dict[str, Dict[str, object]] = {}
-
-        for ann_id, ann in self.ann_map.items():
-            weight_file = f"{weight_prefix}_{ann_id}.pt"
-            ann.save(str(base / weight_file))
-
-            fig_paths: List[str] = []
-            for idx, fig in enumerate(self.figures_by_ann.get(ann_id, [])):
-                fig_name = f"{weight_prefix}_{ann_id}_fig{idx}.png"
-                fig.savefig(base / fig_name)
-                plt.close(fig)
-                fig_paths.append(fig_name)
-
-            project[str(ann_id)] = {
-                "weights": weight_file,
-                "metrics": self.metrics_by_ann.get(ann_id, {}),
-                "figures": fig_paths,
-            }
-
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump({"anns": project}, f, indent=2)
-
-    def load_project(self, json_path: str) -> None:
-        """Load ANNs, metrics and figures from ``json_path``.
-
-        Existing networks and cached artefacts are discarded.  Weight files and
-        figure images are resolved relative to ``json_path``.
-        """
-
-        base = Path(json_path).resolve().parent
-        with open(json_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        anns = data.get("anns", {})
-        self.ann_map.clear()
-        self.metrics_by_ann.clear()
-        self.figures_by_ann.clear()
-        for ann_id_str, ann_data in anns.items():
-            ann_id = int(ann_id_str)
-            ann = PyTorchANN()
-            weight_file = ann_data.get("weights")
-            if weight_file:
-                try:
-                    ann.load(str(base / weight_file))
-                except FileNotFoundError:
-                    pass
-            self.ann_map[ann_id] = ann
-            self.metrics_by_ann[ann_id] = ann_data.get("metrics", {})
-
-            figs: List = []
-            for fig_name in ann_data.get("figures", []):
-                fig_path = base / fig_name
-                if fig_path.exists():
-                    img = plt.imread(fig_path)
-                    fig = plt.figure()
-                    ax = fig.add_subplot(111)
-                    ax.imshow(img)
-                    ax.axis("off")
-                    figs.append(fig)
-            if figs:
-                self.figures_by_ann[ann_id] = figs
 
     # ------------------------------------------------------------------
     # CONFIG_ANN helpers
@@ -211,7 +119,7 @@ class RedundantNeuralIP:
 
         # Update only the epoch count; GA-tuned learning rate and batch size are preserved
         ann.hp = replace(ann.hp, epochs=epochs)
-        metrics, figs = ann.train(X, y)
+        metrics, figs = ann.train(torch.from_numpy(X), torch.from_numpy(y))
         for old in self.figures_by_ann.get(ann_id, []):
             plt.close(old)
         self.figures_by_ann[ann_id] = figs
@@ -228,7 +136,6 @@ class RedundantNeuralIP:
         ann = self.ann_map.get(ann_id)
         if ann is None:
             return
-        self.last_result = None
         addr = 0x5000
         in_dim = ann.hp.image_size * ann.hp.image_size
         data: List[float] = []
@@ -236,19 +143,12 @@ class RedundantNeuralIP:
             word = memory.read(addr + i)
             data.append(np.frombuffer(np.uint32(word).tobytes(), dtype=np.float32)[0])
         X = np.array(data, dtype=np.float32).reshape(1, -1)
-        X_tensor = torch.from_numpy(X)
-
         probs = ann.predict(
-            X_tensor,
+            torch.from_numpy(X),
             mc_dropout=len(tokens) > 1 and tokens[1].lower() == "true",
         )
-        ann_pred = int(probs.argmax(dim=1)[0])
-
-        self._argmax[ann_id] = ann_pred
-        self.vote_history.append(ann_pred)
-        names = self.class_names
-        ann_label = names[ann_pred] if names and 0 <= ann_pred < len(names) else ann_pred
-        print(f"ANN {ann_id} prediction: {ann_label}")
+        self.last_result = int(probs.argmax(dim=1)[0])
+        print(f"ANN {ann_id} prediction: {self.last_result}")
 
     # ------------------------------------------------------------------
     # TUNE_GA helpers
@@ -266,10 +166,8 @@ class RedundantNeuralIP:
         X, y = dataset
 
         best_hp, best_ann = genetic_search(
-            X,
-            y,
-            generations=generations,
-            population_size=population,
+            torch.from_numpy(X), torch.from_numpy(y),
+            generations=generations, population_size=population,
         )
         self.ann_map[ann_id] = best_ann
 
@@ -278,30 +176,12 @@ class RedundantNeuralIP:
     # ------------------------------------------------------------------
     def predict_majority(self, X: np.ndarray):
         preds = {}
-        votes: List[int] = []
-        tensor = torch.from_numpy(X)
         for ann_id, ann in self.ann_map.items():
-            probs = ann.predict(tensor)
-            pred = int(probs.argmax(dim=1)[0])
-            preds[ann_id] = np.array([pred])
-            votes.append(pred)
-
-        majority = None
-        if len(votes) == 3:
-            top, count = Counter(votes).most_common(1)[0]
-            if count >= 2:
-                majority = top
+            probs = ann.predict(torch.from_numpy(X))
+            preds[ann_id] = probs.argmax(dim=1).numpy()
+        votes = [preds[ann_id][0] for ann_id in self.ann_map]
+        majority = Counter(votes).most_common(1)[0][0]
         return majority, preds
-
-    def cached_majority(self) -> int | None:
-        """Compute majority vote from cached argmax values."""
-        votes = list(self._argmax.values())
-        majority = None
-        if len(votes) == 3:
-            top, count = Counter(votes).most_common(1)[0]
-            if count >= 2:
-                majority = top
-        return majority
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -313,43 +193,31 @@ class RedundantNeuralIP:
                 return None
             data_path = Path(self.train_data_dir) / "data.npy"
             labels_path = Path(self.train_data_dir) / "labels.npy"
-
-            X = y = None
-            if data_path.exists() and labels_path.exists():
-                X = torch.from_numpy(np.load(data_path).astype(np.float32))
-                y = torch.from_numpy(np.load(labels_path).astype(np.int64))
-                # Rotate augmentation produces 72 images per original sample.
-                # If the cached dataset size is not a multiple of 72 it was
-                # likely generated without rotation, so regenerate to ensure
-                # the confusion matrix accounts for all augmented images.
-                class_dirs = sorted([d for d in Path(self.train_data_dir).iterdir() if d.is_dir()])
-                expected_labels = list(range(len(class_dirs)))
-                unique_labels = sorted(torch.unique(y).tolist())
-                if X.shape[0] % 72 != 0 or unique_labels != expected_labels:
-                    X = y = None
-
-            if X is None or y is None:
-                X, y = load_vehicle_dataset(self.train_data_dir, hp.image_size)
-                np.save(data_path, X.numpy())
-                np.save(labels_path, y.numpy())
-            self.class_names = sorted(d.name for d in Path(self.train_data_dir).iterdir() if d.is_dir())
-            num_classes = len(self.class_names)
-            hp.num_classes = num_classes
-            for ann_id, ann in list(self.ann_map.items()):
-                if ann.hp.num_classes != num_classes:
-                    ann_hp = replace(ann.hp, num_classes=num_classes)
-                    self.ann_map[ann_id] = PyTorchANN(ann_hp)
-
+            if not data_path.exists() or not labels_path.exists():
+                X_list: List[np.ndarray] = []
+                y_list: List[int] = []
+                letter2label = {"A": 0, "B": 1, "C": 2}
+                image_files = (
+                    sorted(Path(self.train_data_dir).glob("*.png"))
+                    + sorted(Path(self.train_data_dir).glob("*.jpg"))
+                )
+                for img_path in image_files:
+                    letter = img_path.stem.split("_")[0].upper()
+                    if letter not in letter2label:
+                        continue
+                    processed = load_process_shape_image(str(img_path))
+                    X_list.extend(processed)
+                    y_list.extend([letter2label[letter]] * len(processed))
+                if not X_list:
+                    print("No training images found; aborting training.")
+                    return None
+                X = np.stack(X_list).astype(np.float32)
+                y = np.array(y_list, dtype=np.int64)
+                np.save(data_path, X)
+                np.save(labels_path, y)
+            else:
+                X = np.load(data_path).astype(np.float32)
+                y = np.load(labels_path).astype(np.int64)
             self._cached_dataset = (X, y)
-        else:
-            X, y = self._cached_dataset
-            self.class_names = sorted(d.name for d in Path(self.train_data_dir).iterdir() if d.is_dir())
-            num_classes = len(self.class_names)
-            if hp.num_classes != num_classes:
-                hp.num_classes = num_classes
-                for ann_id, ann in list(self.ann_map.items()):
-                    if ann.hp.num_classes != num_classes:
-                        ann_hp = replace(ann.hp, num_classes=num_classes)
-                        self.ann_map[ann_id] = PyTorchANN(ann_hp)
         return self._cached_dataset
 

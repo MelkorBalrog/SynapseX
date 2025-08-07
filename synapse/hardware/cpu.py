@@ -39,34 +39,10 @@ class CPU:
         self.regs["$t9"] = 0
         self.regs["$at"] = 0
         self.label_map = {}
-        # Addresses of data labels in bytes
-        self.data_map = {}
 
     # ------------------------------------------------------------------
     def set_label_map(self, label_map):
         self.label_map = label_map
-
-    def set_data_map(self, data_map):
-        """Provide mapping from data labels to memory addresses."""
-        self.data_map = data_map
-
-    def _resolve_data_addr(self, token: str) -> int:
-        """Translate an assembly memory operand into a byte address."""
-        if "(" in token:
-            label, reg_part = token.split("(")
-            reg = reg_part.rstrip(")")
-            base = self.data_map.get(label, 0)
-            offset = self.get_reg(reg)
-            return base + offset
-        if "+" in token:
-            label, imm = token.split("+")
-            base = self.data_map.get(label, 0)
-            return base + int(imm, 0)
-        return self.data_map.get(token, 0)
-
-    def _to_signed(self, val: int) -> int:
-        """Interpret a 32-bit register value as signed."""
-        return val if val < 0x80000000 else val - 0x100000000
 
     def get_reg(self, r):
         return self.regs.get(r, 0)
@@ -93,12 +69,8 @@ class CPU:
             self.running = False
             if self.neural_ip.last_result is not None:
                 result = self.get_reg("$t9")
-                names = self.neural_ip.class_names
-                if names and 0 <= result < len(names):
-                    label = names[result]
-                else:
-                    label = result
-                print(f"Final classification: {label}")
+                label_map = {0: "A", 1: "B", 2: "Unknown"}
+                print(f"Final classification: {label_map.get(result, result)}")
         elif instr == "ADDI":
             rd = parts[1].rstrip(",")
             rs = parts[2].rstrip(",")
@@ -109,11 +81,6 @@ class CPU:
             rs = parts[2].rstrip(",")
             rt = parts[3]
             self.set_reg(rd, self.get_reg(rs) + self.get_reg(rt))
-        elif instr == "SLL":
-            rd = parts[1].rstrip(",")
-            rt = parts[2].rstrip(",")
-            shamt = int(parts[3], 0)
-            self.set_reg(rd, self.get_reg(rt) << shamt)
         elif instr == "BEQ":
             rs = parts[1].rstrip(",")
             rt = parts[2].rstrip(",")
@@ -124,24 +91,14 @@ class CPU:
             rs = parts[1].rstrip(",")
             rt = parts[2].rstrip(",")
             label = parts[3]
-            if self._to_signed(self.get_reg(rs)) > self._to_signed(self.get_reg(rt)):
+            if self.get_reg(rs) > self.get_reg(rt):
                 self.pc = self.label_map.get(label, self.pc)
         elif instr == "J":
             label = parts[1]
             self.pc = self.label_map.get(label, self.pc)
-        elif instr == "LW":
-            rd = parts[1].rstrip(",")
-            addr_token = parts[2]
-            addr = self._resolve_data_addr(addr_token)
-            self.set_reg(rd, self.memory.read(addr // 4))
-        elif instr == "SW":
-            rs = parts[1].rstrip(",")
-            addr_token = parts[2]
-            addr = self._resolve_data_addr(addr_token)
-            self.memory.write(addr // 4, self.get_reg(rs))
         elif instr == "OP_NEUR":
             subcmd = " ".join(parts[1:])
             self.neural_ip.run_instruction(subcmd, memory=self.memory)
-            if self.neural_ip.last_result is not None:
+            if subcmd.upper().startswith("INFER_ANN") and self.neural_ip.last_result is not None:
                 self.set_reg("$t9", int(self.neural_ip.last_result))
 

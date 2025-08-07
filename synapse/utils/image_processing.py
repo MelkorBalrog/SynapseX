@@ -18,8 +18,6 @@
 """Image processing utilities for SynapseX."""
 import os
 import math
-from typing import Callable, Generator, Iterable, Tuple, Any
-
 import numpy as np
 from PIL import Image
 from numba import njit
@@ -70,67 +68,6 @@ def apply_kernel_numba(image, kernel):
 
 def apply_kernel(image, kernel):
     return apply_kernel_numba(image, kernel)
-
-
-def stream_frames(video_source: Any) -> Generator[np.ndarray, None, None]:
-    """Yield frames from a video file or camera.
-
-    Parameters
-    ----------
-    video_source:
-        Path to a video file or an integer camera index understood by OpenCV.
-
-    Yields
-    ------
-    numpy.ndarray
-        Consecutive frames read from the source in BGR format.
-    """
-    try:
-        import cv2  # imported lazily to keep dependency optional
-    except Exception as exc:  # pragma: no cover - handled at runtime
-        raise ImportError("stream_frames requires OpenCV (cv2) to be installed") from exc
-
-    cap = cv2.VideoCapture(video_source)
-    if not cap.isOpened():
-        raise ValueError(f"Unable to open video source: {video_source}")
-
-    try:
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            yield frame
-    finally:
-        cap.release()
-
-
-def stream_tracks(
-    video_source: Any,
-    detect_objects: Callable[[np.ndarray], Iterable[Tuple[int, int, int, int]]],
-    tracking,
-) -> Generator[Tuple[np.ndarray, Any], None, None]:
-    """Yield frames alongside tracking results.
-
-    For each frame obtained from :func:`stream_frames`, ``detect_objects`` is
-    invoked to produce detections which are then fed into ``tracking.update``.
-    The resulting track data is yielded together with the frame so callers can
-    render or otherwise process the output.
-
-    Parameters
-    ----------
-    video_source:
-        Path or index of the video source understood by OpenCV.
-    detect_objects:
-        Callable returning an iterable of bounding boxes (x, y, w, h) for a
-        given frame.
-    tracking:
-        Object exposing an ``update`` method that accepts the detections and
-        returns tracking results.
-    """
-    for frame in stream_frames(video_source):
-        detections = detect_objects(frame)
-        tracks = tracking.update(detections)
-        yield frame, tracks
 
 
 # Additional processing functions (canny_edge_detection, morph_dilate, etc.) could be
