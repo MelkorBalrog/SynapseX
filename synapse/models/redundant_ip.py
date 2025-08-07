@@ -59,6 +59,8 @@ class RedundantNeuralIP:
         self.vote_history: List[int] = []
         # Mapping from class index to folder name
         self.class_names: List[str] = []
+        # Cached argmax per ANN from the last inference
+        self._argmax: Dict[int, int] = {}
 
     # ------------------------------------------------------------------
     # Assembly interface
@@ -92,6 +94,14 @@ class RedundantNeuralIP:
             json_path = tokens[1] if len(tokens) > 1 else "project.json"
             prefix = tokens[2] if len(tokens) > 2 else "weights"
             self.save_project(json_path, prefix)
+        elif op == "GET_NUM_CLASSES":
+            self.last_result = hp.num_classes or len(self.class_names)
+        elif op == "GET_ARGMAX":
+            if len(tokens) > 1:
+                ann_id = int(tokens[1])
+                self.last_result = self._argmax.get(ann_id)
+            else:
+                self.last_result = None
 
     # ------------------------------------------------------------------
     # Persistence helpers
@@ -218,6 +228,7 @@ class RedundantNeuralIP:
         ann = self.ann_map.get(ann_id)
         if ann is None:
             return
+        self.last_result = None
         addr = 0x5000
         in_dim = ann.hp.image_size * ann.hp.image_size
         data: List[float] = []
@@ -227,35 +238,17 @@ class RedundantNeuralIP:
         X = np.array(data, dtype=np.float32).reshape(1, -1)
         X_tensor = torch.from_numpy(X)
 
-        # Per-ANN prediction
         probs = ann.predict(
             X_tensor,
             mc_dropout=len(tokens) > 1 and tokens[1].lower() == "true",
         )
         ann_pred = int(probs.argmax(dim=1)[0])
 
-        # Majority vote across all ANNs using a 2-out-of-3 rule
-        votes: List[int] = []
-        for other in self.ann_map.values():
-            p = other.predict(X_tensor)
-            votes.append(int(p.argmax(dim=1)[0]))
-        majority = ann_pred
-        if len(self.ann_map) == 3:
-            top, count = Counter(votes).most_common(1)[0]
-            if count >= 2:
-                majority = top
-        self.last_result = majority
-        self.vote_history.append(self.last_result)
+        self._argmax[ann_id] = ann_pred
+        self.vote_history.append(ann_pred)
         names = self.class_names
         ann_label = names[ann_pred] if names and 0 <= ann_pred < len(names) else ann_pred
         print(f"ANN {ann_id} prediction: {ann_label}")
-        if len(self.ann_map) == 3:
-            majority_label = (
-                names[self.last_result]
-                if names and 0 <= self.last_result < len(names)
-                else self.last_result
-            )
-            print(f"Majority vote: {majority_label}")
 
     # ------------------------------------------------------------------
     # TUNE_GA helpers
@@ -299,6 +292,16 @@ class RedundantNeuralIP:
             if count >= 2:
                 majority = top
         return majority, preds
+
+    def cached_majority(self) -> int | None:
+        """Compute majority vote from cached argmax values."""
+        votes = list(self._argmax.values())
+        majority = None
+        if len(votes) == 3:
+            top, count = Counter(votes).most_common(1)[0]
+            if count >= 2:
+                majority = top
+        return majority
 
     # ------------------------------------------------------------------
     # Internal helpers
