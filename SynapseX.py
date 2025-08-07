@@ -184,6 +184,30 @@ class SynapseXGUI(tk.Tk):
         frame.columnconfigure(0, weight=1)
         return frame, text
 
+    def _create_scrolled_figure(self, parent: tk.Widget, fig: Figure) -> ttk.Frame:
+        """Return a frame that displays ``fig`` with horizontal and vertical scrollbars."""
+        frame = ttk.Frame(parent)
+        canvas = tk.Canvas(frame, highlightthickness=0)
+        x_scroll = ttk.Scrollbar(frame, orient="horizontal", command=canvas.xview)
+        y_scroll = ttk.Scrollbar(frame, orient="vertical", command=canvas.yview)
+        canvas.configure(xscrollcommand=x_scroll.set, yscrollcommand=y_scroll.set)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        y_scroll.grid(row=0, column=1, sticky="ns")
+        x_scroll.grid(row=1, column=0, sticky="ew")
+        frame.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+
+        fig_canvas = FigureCanvasTkAgg(fig, canvas)
+        fig_canvas.draw()
+        widget = fig_canvas.get_tk_widget()
+        canvas.create_window((0, 0), window=widget, anchor="nw")
+
+        def _on_configure(_event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        widget.bind("<Configure>", _on_configure)
+        return frame
+
     def _set_dark_mode(self, enable: bool) -> None:
         if enable:
             bg = "#1e1e1e"
@@ -296,10 +320,7 @@ class SynapseXGUI(tk.Tk):
         ax.imshow(img_arr, cmap="gray")
         ax.axis("off")
         try:
-            fig_frame = ttk.Frame(sub_nb)
-            canvas = FigureCanvasTkAgg(fig, fig_frame)
-            canvas.draw()
-            canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
+            fig_frame = self._create_scrolled_figure(sub_nb, fig)
             sub_nb.add(fig_frame, text="Processed")
         except tk.TclError:
             pass
@@ -424,14 +445,11 @@ class SynapseXGUI(tk.Tk):
                 metric_txt.config(state="disabled")
                 ann_nb.add(metric_txt, text="Summary")
             for fig, title in zip(figs, tab_titles):
-                frame = ttk.Frame(ann_nb)
                 try:
-                    canvas = FigureCanvasTkAgg(fig, frame)
-                    canvas.draw()
-                    canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
+                    frame = self._create_scrolled_figure(ann_nb, fig)
                     ann_nb.add(frame, text=title)
                 except tk.TclError:
-                    frame.destroy()
+                    pass
 
         soc.neural_ip.figures_by_ann.clear()
         soc.neural_ip.metrics_by_ann.clear()
