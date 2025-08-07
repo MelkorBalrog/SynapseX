@@ -15,10 +15,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from pathlib import Path
+from typing import Iterable, List
+
 import numpy as np
 import torch
-from PIL import Image, ImageEnhance
-from typing import Iterable, List
+from PIL import Image
 
 try:
     from torchvision import transforms as T
@@ -125,6 +127,52 @@ def morph_dilate(binary_image: np.ndarray, kernel_size: int = 3, iterations: int
                     temp[i, j] = 255
         out = temp
     return out
+
+
+def preprocess_vehicle_image(path: str, target_size: int = 28) -> torch.Tensor:
+    """Convert ``path`` to a flattened grayscale tensor of size ``target_size``."""
+    try:
+        resample = Image.Resampling.LANCZOS
+    except AttributeError:  # pragma: no cover - Pillow < 9
+        resample = Image.LANCZOS
+    img = Image.open(path).convert("L").resize((target_size, target_size), resample=resample)
+    arr = np.array(img, dtype=np.float32) / 255.0
+    return torch.from_numpy(arr.flatten())
+
+
+def load_vehicle_dataset(root_dir: str, target_size: int = 28) -> tuple[torch.Tensor, torch.Tensor]:
+    """Load vehicle images from class-named subdirectories.
+
+    Parameters
+    ----------
+    root_dir:
+        Root directory containing one subfolder per vehicle class.
+    target_size:
+        Square size to which all images are resized.
+
+    Returns
+    -------
+    X, y:
+        ``X`` is a tensor of flattened images and ``y`` contains integer class
+        labels.
+    """
+
+    root = Path(root_dir)
+    images: List[torch.Tensor] = []
+    labels: List[int] = []
+    class_names = sorted([d.name for d in root.iterdir() if d.is_dir()])
+    class_to_idx = {name: idx for idx, name in enumerate(class_names)}
+    for cls in class_names:
+        for img_path in sorted((root / cls).glob("*")):
+            if img_path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".bmp"}:
+                continue
+            images.append(preprocess_vehicle_image(str(img_path), target_size))
+            labels.append(class_to_idx[cls])
+    if not images:
+        raise ValueError("No images found in dataset")
+    X = torch.stack(images)
+    y = torch.tensor(labels, dtype=torch.long)
+    return X, y
 
 
 def load_process_shape_image(
