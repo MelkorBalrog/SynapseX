@@ -29,6 +29,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from .config import hp, HyperParameters
 from .models import TransformerClassifier
+from .image_processing import load_annotated_dataset
 
 
 class PyTorchANN:
@@ -366,3 +367,55 @@ class PyTorchANN:
                 ax.text(j, i, str(cm[i, j]), ha="center", va="center", color="black")
         plt.tight_layout()
         return fig
+
+
+def train_object_detector(
+    root_dir: str, num_classes: int, epochs: int = 10
+) -> "torch.nn.Module":
+    """Train a simple object detector on an annotated dataset.
+
+    The function loads a dataset via :func:`load_annotated_dataset` and trains a
+    ``FasterRCNN`` model from ``torchvision``.  Images are expected to be stored
+    under ``root_dir`` following either COCO or YOLO conventions.
+    """
+
+    import torchvision
+
+    samples = load_annotated_dataset(root_dir)
+
+    class DetectionDataset(torch.utils.data.Dataset):
+        def __init__(self, samples):
+            self.samples = samples
+
+        def __len__(self) -> int:
+            return len(self.samples)
+
+        def __getitem__(self, idx):
+            img, boxes, labels = self.samples[idx]
+            target = {"boxes": boxes, "labels": labels}
+            return img, target
+
+    dataset = DetectionDataset(samples)
+    loader = torch.utils.data.DataLoader(
+        dataset, batch_size=2, shuffle=True, collate_fn=lambda x: tuple(zip(*x))
+    )
+
+    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
+        weights=None, num_classes=num_classes
+    )
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+    optim = torch.optim.SGD(model.parameters(), lr=0.005, momentum=0.9)
+
+    model.train()
+    for _ in range(epochs):
+        for images, targets in loader:
+            imgs = [img.to(device) for img in images]
+            targs = [{k: v.to(device) for k, v in t.items()} for t in targets]
+            losses = model(imgs, targs)
+            loss = sum(losses.values())
+            optim.zero_grad()
+            loss.backward()
+            optim.step()
+
+    return model

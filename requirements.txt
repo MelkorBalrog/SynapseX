@@ -20,3 +20,4 @@ torch
 Pillow
 numba
 matplotlib
+torchvision
