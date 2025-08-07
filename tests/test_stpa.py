@@ -14,6 +14,20 @@ def test_available_actions_lists_from_diagram():
     assert element.available_actions() == ["A", "B"]
 
 
+def test_diagram_materialises_iterables():
+    """Generators should remain accessible after initial iteration."""
+
+    def gen():
+        for item in ["A", "B"]:
+            yield item
+
+    diagram = ControlFlowDiagram(gen())
+    # First call consumes the generator in the constructor, so repeated
+    # calls should still yield all actions.
+    assert diagram.get_control_actions() == ["A", "B"]
+    assert diagram.get_control_actions() == ["A", "B"]
+
+
 def test_create_stpa_analysis_builds_analysis():
     elements = []
     analysis = create_stpa_analysis(["A"], elements)
