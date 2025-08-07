@@ -97,6 +97,7 @@ class SynapseXGUI(tk.Tk):
         style = ttk.Style(self)
         style.theme_use("clam")
         self.current_asm_path: Path | None = None
+        self.dark_mode = False
         self._build_menu()
         self._build_ui()
 
@@ -155,6 +156,11 @@ class SynapseXGUI(tk.Tk):
         run_btn = ttk.Button(right, text="Run Program", command=self.run_selected)
         run_btn.pack(fill=tk.X, padx=5)
 
+        self.dark_mode_btn = ttk.Button(
+            right, text="Dark Mode", command=self.toggle_dark_mode
+        )
+        self.dark_mode_btn.pack(fill=tk.X, padx=5, pady=5)
+
         ttk.Label(right, text="Training Data").pack(anchor="w", padx=5, pady=(10, 0))
         self.data_entry = ttk.Entry(right)
         self.data_entry.pack(fill=tk.X, padx=5)
@@ -201,6 +207,32 @@ class SynapseXGUI(tk.Tk):
 
         widget.bind("<Configure>", _on_configure)
         return frame
+
+    def _set_dark_mode(self, enable: bool) -> None:
+        if enable:
+            bg = "#1e1e1e"
+            fg = "#d4d4d4"
+            instr = "#569CD6"
+            number = "#B5CEA8"
+            comment = "#6A9955"
+        else:
+            bg = "white"
+            fg = "black"
+            instr = "#0066CC"
+            number = "#CC0000"
+            comment = "#008000"
+        self.asm_text.configure(background=bg, foreground=fg, insertbackground=fg)
+        self.asm_text.tag_configure("instr", foreground=instr)
+        self.asm_text.tag_configure("number", foreground=number)
+        self.asm_text.tag_configure("comment", foreground=comment)
+
+    def toggle_dark_mode(self) -> None:
+        self.dark_mode = not self.dark_mode
+        self._set_dark_mode(self.dark_mode)
+        self.dark_mode_btn.config(
+            text="Light Mode" if self.dark_mode else "Dark Mode"
+        )
+        self._highlight_asm()
 
     def choose_data_dir(self) -> None:
         path = filedialog.askdirectory(title="Select Training Data Directory")
