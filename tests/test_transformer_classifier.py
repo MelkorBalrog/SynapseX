@@ -27,6 +27,7 @@ sys.path.append(os.getcwd())
 from synapsex.models import TransformerClassifier
 
 
+@pytest.mark.skipif(shutil.which("iverilog") is None, reason="iverilog not installed")
 def test_transformer_classifier_hw_match():
     if shutil.which("iverilog") is None or shutil.which("vvp") is None:
         pytest.skip("iverilog not installed")
