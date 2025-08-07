@@ -15,8 +15,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import os
-from pathlib import Path
 import numpy as np
 from PIL import Image
 from typing import Iterable, List
@@ -126,11 +124,9 @@ def morph_dilate(binary_image: np.ndarray, kernel_size: int = 3, iterations: int
 def load_process_shape_image(
     path: str,
     target_size: int = 28,
-    save: bool = True,
     canny_low: float = 50,
     canny_high: float = 150,
     dilation_iter: int = 1,
-    out_dir: str | None = None,
     angles: Iterable[int] = range(0, 181, 10),
 ) -> List[np.ndarray]:
     try:
@@ -158,12 +154,5 @@ def load_process_shape_image(
             Image.fromarray(dilated.astype(np.uint8)).resize((target_size, target_size), resample=resample_lanczos),
             dtype=np.float32,
         ) / 255.0
-        if save:
-            base = Path(path).name
-            fname, _ = os.path.splitext(base)
-            proc_root = Path(out_dir) if out_dir else Path(path).parent / "processed_images"
-            proc_root.mkdir(parents=True, exist_ok=True)
-            save_path = proc_root / f"{fname}_rot{angle}.png"
-            Image.fromarray((norm_img * 255).astype(np.uint8)).save(save_path)
         processed_images.append(norm_img.flatten())
     return processed_images
