@@ -237,13 +237,23 @@ class RedundantNeuralIP:
                 return None
             data_path = Path(self.train_data_dir) / "data.npy"
             labels_path = Path(self.train_data_dir) / "labels.npy"
-            if not data_path.exists() or not labels_path.exists():
+
+            X = y = None
+            if data_path.exists() and labels_path.exists():
+                X = torch.from_numpy(np.load(data_path).astype(np.float32))
+                y = torch.from_numpy(np.load(labels_path).astype(np.int64))
+                # Rotate augmentation produces 72 images per original sample.
+                # If the cached dataset size is not a multiple of 72 it was
+                # likely generated without rotation, so regenerate to ensure
+                # the confusion matrix accounts for all augmented images.
+                if X.shape[0] % 72 != 0:
+                    X = y = None
+
+            if X is None or y is None:
                 X, y = load_vehicle_dataset(self.train_data_dir, hp.image_size)
                 np.save(data_path, X.numpy())
                 np.save(labels_path, y.numpy())
-            else:
-                X = torch.from_numpy(np.load(data_path).astype(np.float32))
-                y = torch.from_numpy(np.load(labels_path).astype(np.int64))
+
             self._cached_dataset = (X, y)
         return self._cached_dataset
 
