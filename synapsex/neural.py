@@ -1,7 +1,18 @@
 import os
+import sys
 from dataclasses import replace
 from typing import Dict, Tuple, List, Optional
 
+import matplotlib
+
+# Only fall back to a non-interactive backend when running headless on
+# platforms that honour the ``DISPLAY`` variable (i.e. Unix).  Windows users
+# typically have a display even when ``DISPLAY`` is unset, so we avoid forcing
+# the ``Agg`` backend there.
+if os.environ.get("DISPLAY", "") == "" and sys.platform != "win32":
+    matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
@@ -69,12 +80,12 @@ class PyTorchANN:
         patience: int = 3,
         min_epochs: int = 5,
         val_split: float = 0.2,
-    ) -> Dict[str, float]:
-        """Train the network and return evaluation metrics.
+    ) -> Tuple[Dict[str, float], List[plt.Figure]]:
+        """Train the network and return evaluation metrics and figures.
 
-        Uses a small validation split for early stopping based on the F1 score
-        and restores the best observed model weights.  ``min_epochs`` guarantees
-        that a few epochs are always run so the network can start learning."""
+        The function always generates training curves, weight heatmaps and a
+        confusion matrix for consumers such as the GUI.  Callers can decide
+        how to display or embed the returned figures."""
 
         # Split the data into a deterministic training/validation partition so
         # early stopping decisions are based on unseen samples.
@@ -92,32 +103,60 @@ class PyTorchANN:
         criterion = nn.CrossEntropyLoss()
         self.model.train()
 
+        loss_hist: List[float] = []
+        acc_hist: List[float] = []
+        prec_hist: List[float] = []
+        rec_hist: List[float] = []
+        f1_hist: List[float] = []
+
         best_f1 = -1.0
         best_state: Optional[dict] = None
         stale_epochs = 0
 
-        for epoch in range(self.hp.epochs):
+        for _ in range(self.hp.epochs):
+            epoch_loss = 0.0
+            total = 0
             for xb, yb in train_loader:
                 opt.zero_grad()
                 logits = self.model(xb)
                 loss = criterion(logits, yb)
                 loss.backward()
                 opt.step()
+                epoch_loss += float(loss.item()) * xb.size(0)
+                total += xb.size(0)
 
-            metrics = self.evaluate(val_X, val_y)
-            if metrics["f1"] > best_f1 + 1e-4:
-                best_f1 = metrics["f1"]
+            loss_hist.append(epoch_loss / total if total else 0.0)
+            train_metrics = self.evaluate(train_X, train_y)
+            acc_hist.append(train_metrics["accuracy"])
+            prec_hist.append(train_metrics["precision"])
+            rec_hist.append(train_metrics["recall"])
+            f1_hist.append(train_metrics["f1"])
+
+            val_metrics = self.evaluate(val_X, val_y)
+            if val_metrics["f1"] > best_f1 + 1e-4:
+                best_f1 = val_metrics["f1"]
                 best_state = self.model.state_dict()
                 stale_epochs = 0
             else:
                 stale_epochs += 1
-                if epoch + 1 >= min_epochs and stale_epochs >= patience:
+                if len(loss_hist) >= min_epochs and stale_epochs >= patience:
                     break
 
         if best_state is not None:
             self.model.load_state_dict(best_state)
 
-        return self.evaluate(X, y)
+        final_metrics = self.evaluate(X, y)
+
+        # Generate figures for consumers such as the GUI.
+        figs = [
+            self._plot_training(loss_hist, acc_hist, prec_hist, rec_hist, f1_hist),
+            self._plot_weights(),
+        ]
+        preds = self.predict(X).argmax(dim=1).cpu().numpy()
+        figs.append(self._plot_confusion_matrix(y.cpu().numpy(), preds))
+        figs = [fig for fig in figs if fig is not None]
+
+        return final_metrics, figs
 
     def predict(self, X: torch.Tensor, mc_dropout: bool = False) -> torch.Tensor:
         X = self._format_input(X)
@@ -227,6 +266,75 @@ class PyTorchANN:
                 nhead=self.hp.nhead,
             )
             self.model.load_state_dict(state, strict=False)
+
+
+    # ------------------------------------------------------------------
+    # Visualisation helpers
+    # ------------------------------------------------------------------
+    def _plot_training(
+        self,
+        loss_hist: List[float],
+        acc_hist: List[float],
+        prec_hist: List[float],
+        rec_hist: List[float],
+        f1_hist: List[float],
+    ):
+        if not loss_hist:
+            return None
+        epochs = range(1, len(loss_hist) + 1)
+        fig, axes = plt.subplots(5, 1, figsize=(8, 12), sharex=True)
+        axes[0].plot(epochs, loss_hist, color="tab:red")
+        axes[0].set_ylabel("Loss")
+        axes[0].set_title("Training Progress")
+        metrics = [
+            (acc_hist, "Accuracy", "tab:blue"),
+            (prec_hist, "Precision", "tab:orange"),
+            (rec_hist, "Recall", "tab:green"),
+            (f1_hist, "F1 Score", "tab:purple"),
+        ]
+        for ax, (hist, label, color) in zip(axes[1:], metrics):
+            ax.plot(epochs, hist, color=color)
+            ax.set_ylabel(label)
+        axes[-1].set_xlabel("Epoch")
+        fig.tight_layout()
+        return fig
+
+    def _plot_weights(self):
+        linears = [m for m in self.model.modules() if isinstance(m, nn.Linear)]
+        if not linears:
+            return None
+        cols = len(linears)
+        fig, axes = plt.subplots(1, cols, figsize=(4 * cols, 4))
+        if cols == 1:
+            axes = [axes]
+        for idx, (layer, ax) in enumerate(zip(linears, axes)):
+            with torch.no_grad():
+                weights = layer.weight.cpu().numpy()
+            ax.imshow(weights, cmap="seismic")
+            ax.set_title(f"Layer {idx + 1} Weights")
+            ax.set_xticks([])
+            ax.set_yticks([])
+        fig.tight_layout()
+        return fig
+
+    def _plot_confusion_matrix(self, y_true: np.ndarray, y_pred: np.ndarray):
+        num_classes = int(max(y_true.max(), y_pred.max()) + 1)
+        cm = np.zeros((num_classes, num_classes), dtype=int)
+        for t, p in zip(y_true, y_pred):
+            cm[int(t), int(p)] += 1
+        fig, ax = plt.subplots()
+        im = ax.imshow(cm, cmap=plt.cm.Blues)
+        fig.colorbar(im, ax=ax)
+        ax.set_xlabel("Predicted")
+        ax.set_ylabel("Actual")
+        ax.set_xticks(range(num_classes))
+        ax.set_yticks(range(num_classes))
+        ax.set_title("Confusion Matrix")
+        for i in range(num_classes):
+            for j in range(num_classes):
+                ax.text(j, i, str(cm[i, j]), ha="center", va="center", color="black")
+        plt.tight_layout()
+        return fig
 
 
 class RedundantNeuralIP:
