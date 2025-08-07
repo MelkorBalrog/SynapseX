@@ -17,7 +17,7 @@
 
 import json
 from pathlib import Path
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Tuple, Union
 
 import numpy as np
 import torch
@@ -130,18 +130,26 @@ def morph_dilate(binary_image: np.ndarray, kernel_size: int = 3, iterations: int
     return out
 
 
-def preprocess_vehicle_image(path: str, target_size: int = 28) -> torch.Tensor:
-    """Convert ``path`` to a flattened grayscale tensor of size ``target_size``."""
+def preprocess_vehicle_image(
+    source: Union[str, Image.Image], target_size: int = 28
+) -> torch.Tensor:
+    """Convert ``source`` to a flattened grayscale tensor of size ``target_size``."""
     try:
         resample = Image.Resampling.LANCZOS
     except AttributeError:  # pragma: no cover - Pillow < 9
         resample = Image.LANCZOS
-    img = Image.open(path).convert("L").resize((target_size, target_size), resample=resample)
+    if isinstance(source, Image.Image):
+        img = source
+    else:
+        img = Image.open(source)
+    img = img.convert("L").resize((target_size, target_size), resample=resample)
     arr = np.array(img, dtype=np.float32) / 255.0
     return torch.from_numpy(arr.flatten())
 
 
-def load_vehicle_dataset(root_dir: str, target_size: int = 28) -> tuple[torch.Tensor, torch.Tensor]:
+def load_vehicle_dataset(
+    root_dir: str, target_size: int = 28, rotate: bool = True
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Load vehicle images from class-named subdirectories.
 
     Parameters
@@ -150,6 +158,9 @@ def load_vehicle_dataset(root_dir: str, target_size: int = 28) -> tuple[torch.Te
         Root directory containing one subfolder per vehicle class.
     target_size:
         Square size to which all images are resized.
+    rotate:
+        If ``True`` each image is augmented with 359 additional rotations
+        covering the full 360° range.
 
     Returns
     -------
@@ -163,12 +174,25 @@ def load_vehicle_dataset(root_dir: str, target_size: int = 28) -> tuple[torch.Te
     labels: List[int] = []
     class_names = sorted([d.name for d in root.iterdir() if d.is_dir()])
     class_to_idx = {name: idx for idx, name in enumerate(class_names)}
+    try:
+        resample_bicubic = Image.Resampling.BICUBIC
+    except AttributeError:  # pragma: no cover - Pillow < 9
+        resample_bicubic = Image.BICUBIC
     for cls in class_names:
         for img_path in sorted((root / cls).glob("*")):
             if img_path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".bmp"}:
                 continue
-            images.append(preprocess_vehicle_image(str(img_path), target_size))
+            pil_img = Image.open(img_path).convert("L")
+            images.append(preprocess_vehicle_image(pil_img, target_size))
             labels.append(class_to_idx[cls])
+            if rotate:
+                bg_color = pil_img.getpixel((0, 0))
+                for angle in range(1, 360):
+                    rotated = pil_img.rotate(
+                        angle, resample=resample_bicubic, expand=True, fillcolor=bg_color
+                    )
+                    images.append(preprocess_vehicle_image(rotated, target_size))
+                    labels.append(class_to_idx[cls])
     if not images:
         raise ValueError("No images found in dataset")
     X = torch.stack(images)

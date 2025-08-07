@@ -19,18 +19,29 @@ import os
 import sys
 
 import numpy as np
+import torch
 from PIL import Image
 
 sys.path.append(os.getcwd())
 from synapsex.image_processing import load_vehicle_dataset
 
 
-def test_load_vehicle_dataset(tmp_path):
+def _prepare_dataset(tmp_path):
     (tmp_path / "car").mkdir()
     (tmp_path / "truck").mkdir()
     Image.fromarray(np.zeros((10, 10), dtype=np.uint8)).save(tmp_path / "car" / "a.png")
     Image.fromarray(np.full((10, 10), 255, dtype=np.uint8)).save(tmp_path / "truck" / "b.png")
 
+
+def test_load_vehicle_dataset(tmp_path):
+    _prepare_dataset(tmp_path)
     X, y = load_vehicle_dataset(tmp_path, target_size=8)
+    assert X.shape == (720, 64)
+    assert torch.bincount(y).tolist() == [360, 360]
+
+
+def test_load_vehicle_dataset_no_rotate(tmp_path):
+    _prepare_dataset(tmp_path)
+    X, y = load_vehicle_dataset(tmp_path, target_size=8, rotate=False)
     assert X.shape == (2, 64)
     assert y.tolist() == [0, 1]
