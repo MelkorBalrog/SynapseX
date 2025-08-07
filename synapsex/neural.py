@@ -1,3 +1,20 @@
+# Copyright (C) 2025 Miguel Marina
+# Author: Miguel Marina <karel.capek.robotics@gmail.com>
+# LinkedIn: https://www.linkedin.com/in/progman32/
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 import os
 import sys
 from dataclasses import replace
@@ -42,13 +59,14 @@ class PyTorchANN:
                 if embed_dim % candidate == 0:
                     self.hp = replace(self.hp, nhead=candidate)
                     break
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = TransformerClassifier(
             self.hp.image_size,
             num_classes=3,
             dropout=self.hp.dropout,
             num_layers=self.hp.num_layers,
             nhead=self.hp.nhead,
-        )
+        ).to(self.device)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -107,7 +125,10 @@ class PyTorchANN:
 
         train_ds = TensorDataset(self._format_input(train_X), train_y)
         train_loader = DataLoader(
-            train_ds, batch_size=self.hp.batch_size, shuffle=True
+            train_ds,
+            batch_size=self.hp.batch_size,
+            shuffle=True,
+            pin_memory=self.device.type == "cuda",
         )
 
         opt = torch.optim.Adam(self.model.parameters(), lr=self.hp.learning_rate)
@@ -128,6 +149,8 @@ class PyTorchANN:
             epoch_loss = 0.0
             total = 0
             for xb, yb in train_loader:
+                xb = xb.to(self.device, non_blocking=True)
+                yb = yb.to(self.device, non_blocking=True)
                 opt.zero_grad()
                 logits = self.model(xb)
                 loss = criterion(logits, yb)
@@ -170,19 +193,19 @@ class PyTorchANN:
         return final_metrics, figs
 
     def predict(self, X: torch.Tensor, mc_dropout: bool = False) -> torch.Tensor:
-        X = self._format_input(X)
+        X = self._format_input(X).to(self.device)
         if mc_dropout:
             self.model.train()  # enable dropout
             preds = []
             for _ in range(self.hp.mc_dropout_passes):
                 preds.append(self.model(X))
             mean = torch.stack(preds).mean(0)
-            return nn.functional.softmax(mean, dim=1)
+            return nn.functional.softmax(mean, dim=1).cpu()
         else:
             self.model.eval()
             with torch.no_grad():
                 logits = self.model(X)
-            return nn.functional.softmax(logits, dim=1)
+            return nn.functional.softmax(logits, dim=1).cpu()
 
     def evaluate(self, X: torch.Tensor, y: torch.Tensor) -> Dict[str, float]:
         """Return accuracy, precision, recall and F1 for the given dataset."""
@@ -191,9 +214,11 @@ class PyTorchANN:
 
         self.model.eval()
         with torch.no_grad():
-            logits = self.model(self._format_input(X))
-            preds = logits.argmax(dim=1)
+            logits = self.model(self._format_input(X).to(self.device))
+            preds = logits.argmax(dim=1).cpu()
+        logits = logits.cpu()
 
+        y = y.cpu()
         accuracy = float((preds == y).float().mean().item())
         num_classes = logits.shape[1]
         precision_list = []
@@ -239,7 +264,8 @@ class PyTorchANN:
         self.model = best_ann.model
 
     def save(self, path: str) -> None:
-        torch.save({"state_dict": self.model.state_dict(), "hp": self.hp.__dict__}, path)
+        state = {k: v.cpu() for k, v in self.model.state_dict().items()}
+        torch.save({"state_dict": state, "hp": self.hp.__dict__}, path)
 
     def load(self, path: str) -> None:
         state = torch.load(path, map_location="cpu")
@@ -260,7 +286,7 @@ class PyTorchANN:
                 dropout=self.hp.dropout,
                 num_layers=self.hp.num_layers,
                 nhead=self.hp.nhead,
-            )
+            ).to(self.device)
             # Allow loading models saved without positional embeddings
             self.model.load_state_dict(state["state_dict"], strict=False)
         else:
@@ -277,7 +303,7 @@ class PyTorchANN:
                 dropout=self.hp.dropout,
                 num_layers=self.hp.num_layers,
                 nhead=self.hp.nhead,
-            )
+            ).to(self.device)
             self.model.load_state_dict(state, strict=False)
 
 

@@ -1,3 +1,20 @@
+# Copyright (C) 2025 Miguel Marina
+# Author: Miguel Marina <karel.capek.robotics@gmail.com>
+# LinkedIn: https://www.linkedin.com/in/progman32/
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 from typing import Tuple
 import torch
 from torch import nn
@@ -30,7 +47,12 @@ class TransformerClassifier(nn.Module):
         # Positional embeddings for each patch
         self.pos_embed = nn.Parameter(torch.zeros(n_patches, embed_dim))
         nn.init.normal_(self.pos_embed, std=0.02)
-        encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=self.nhead, dropout=dropout)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=embed_dim,
+            nhead=self.nhead,
+            dropout=dropout,
+            batch_first=True,
+        )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.dropout = nn.Dropout(dropout)
         self.head = nn.Linear(n_patches * embed_dim, num_classes)
