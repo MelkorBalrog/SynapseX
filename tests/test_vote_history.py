@@ -4,6 +4,7 @@ import numpy as np
 
 sys.path.append(os.getcwd())
 
+from synapse.constants import IMAGE_BUFFER_BASE_ADDR_BYTES
 from synapse.models.redundant_ip import RedundantNeuralIP
 
 
@@ -12,7 +13,7 @@ class DummyMemory:
         self.data = data
 
     def read(self, addr: int) -> int:
-        idx = addr - 0x5000
+        idx = addr - IMAGE_BUFFER_BASE_ADDR_BYTES // 4
         val = self.data[idx]
         return np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
 

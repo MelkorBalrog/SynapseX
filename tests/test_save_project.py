@@ -3,6 +3,7 @@ import json
 import matplotlib.pyplot as plt
 
 from synapse.models.redundant_ip import RedundantNeuralIP
+from synapsex.config import hp
 from synapsex.neural import PyTorchANN
 
 
