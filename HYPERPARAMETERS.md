@@ -54,3 +54,16 @@ The `HyperParameters` dataclass exposes similar knobs for runtime configuration.
 | `mc_dropout_passes` | `10` | Number of forward passes to average when using Monte Carlo dropout. |
 | `num_layers` | `2` | Number of transformer encoder layers used by the classifier. |
 | `nhead` | `4` | Attention heads per transformer layer. Adjusted to divide the embedding dimension. |
+
+## Genetic Algorithm Search
+
+The hyper-parameters above form the search space for the built-in genetic
+algorithm implemented in `synapsex/genetic.py`. The GA mutates dropout, learning
+rate, transformer depth and attention heads, evaluating each candidate on a
+validation split and keeping the configuration with the strongest F1 score.
+
+## Target Metrics
+
+Training tracks accuracy, precision, recall and F1 each epoch. Early stopping
+uses validation F1 as the target metric and restores the weights from the best
+scoring epoch.

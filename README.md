@@ -37,9 +37,13 @@ hand-written characters.
 - **Evaluation metrics.** Training curves track loss, accuracy, precision,
   recall and F1 while a confusion matrix visualises classification results for
   any number of classes.
- - **Validation-based early stopping.** Training monitors a held-out validation
-   split, restoring the best model weights to avoid the "stuck at one class"
-   behaviour and improve overall metrics.
+- **Validation-based early stopping.** Training monitors a held-out validation
+  split, restoring the best model weights to avoid the "stuck at one class"
+  behaviour and improve overall metrics.
+- **Genetic algorithm tuning.** A tiny GA explores learning rates, dropout and
+  transformer depth to squeeze out better accuracy, recall, precision and F1.
+- **Target-metrics training.** Optimisation halts when validation F1 stalls,
+  preserving the model state that achieved the strongest score.
 
 ## Getting Started
 
@@ -240,7 +244,9 @@ into a NumPy dataset and cached for reuse.  The network then trains with PyTorch
 using an Adam optimizer and cross‑entropy loss while dropout layers stay active
 to support later majority voting.  After every epoch SynapseX records loss,
 accuracy, precision, recall and F1 before finally plotting the curves and
-serialising the model weights.
+serialising the model weights.  Training is metric driven – a validation split
+tracks the F1 score and halts optimisation when the metric fails to improve,
+restoring the best performing weights.
 
 The high‑level flow is shown below:
 
@@ -271,9 +277,10 @@ helpers incorporate a couple of classic optimisation strategies:
   epochs, reducing the risk of overfitting.
 - **Genetic algorithms** explore different dropout, learning-rate and
   architectural choices (transformer depth and attention heads) and retain the
-  best scoring network to curb false positives and negatives.  The compact
-  implementation lives in `synapsex/genetic.py` and can be invoked via
-  `PyTorchANN.tune_hyperparameters_ga` before calling `train`.
+  best scoring network to curb false positives and negatives.  Fitness is the
+  validation F1 score, so the search favours architectures that meet the target
+  metric.  The compact implementation lives in `synapsex/genetic.py` and can be
+  invoked via `PyTorchANN.tune_hyperparameters_ga` before calling `train`.
 
 Trained checkpoints persist the selected hyper-parameters so classification code
 can recreate the exact network structure discovered by the search.
