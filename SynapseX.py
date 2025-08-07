@@ -56,16 +56,25 @@ class ScrollableNotebook(ttk.Frame):
         self.h_scroll = ttk.Scrollbar(self, orient=tk.HORIZONTAL, command=self.canvas.xview)
         self.canvas.configure(xscrollcommand=self.h_scroll.set)
         self.notebook = ttk.Notebook(self.canvas, **kwargs)
-        self.canvas.create_window((0, 0), window=self.notebook, anchor="nw")
+        self._window = self.canvas.create_window((0, 0), window=self.notebook, anchor="nw")
         self.canvas.pack(fill=tk.BOTH, expand=1)
         self.h_scroll.pack(fill=tk.X)
         self.notebook.bind("<Configure>", self._on_configure)
+        self.canvas.bind("<Configure>", self._on_canvas_resize)
 
     def _on_configure(self, _event) -> None:
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
+    def _on_canvas_resize(self, _event) -> None:
+        self.canvas.itemconfigure(
+            self._window,
+            width=self.canvas.winfo_width(),
+            height=self.canvas.winfo_height(),
+        )
+
     # proxy common notebook methods
     def add(self, child, **kw):
+        kw.setdefault("sticky", "nsew")
         return self.notebook.add(child, **kw)
 
     def tabs(self):
@@ -443,11 +452,11 @@ class SynapseXGUI(tk.Tk):
                 for name, val in metrics.items():
                     metric_txt.insert(tk.END, f"{name}: {val:.4f}\n")
                 metric_txt.config(state="disabled")
-                ann_nb.add(metric_txt, text="Summary")
+                ann_nb.add(metric_txt, text="Summary", sticky="nsew")
             for fig, title in zip(figs, tab_titles):
                 try:
                     frame = self._create_scrolled_figure(ann_nb, fig)
-                    ann_nb.add(frame, text=title)
+                    ann_nb.add(frame, text=title, sticky="nsew")
                 except tk.TclError:
                     pass
 
