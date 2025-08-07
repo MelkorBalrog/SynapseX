@@ -76,6 +76,10 @@ class RedundantNeuralIP:
         elif op == "INFER_ANN":
             result = self._infer_ann(tokens[1:], memory)
         elif op == "GET_NUM_CLASSES":
+            if hp.num_classes == 0:
+                raise ValueError(
+                    "hp.num_classes is 0; load training metadata or configure an ANN first"
+                )
             result = hp.num_classes
         elif op == "GET_ARGMAX":
             if len(tokens) > 1:
@@ -85,12 +89,23 @@ class RedundantNeuralIP:
             prefix = tokens[1] if len(tokens) > 1 else "weights"
             for ann_id, ann in self.ann_map.items():
                 ann.save(f"{prefix}_{ann_id}.pt")
+            meta_path = Path(f"{prefix}_meta.json")
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump({"num_classes": hp.num_classes}, f)
         elif op == "LOAD_ALL":
             prefix = tokens[1] if len(tokens) > 1 else "weights"
             for ann_id, ann in self.ann_map.items():
                 try:
                     ann.load(f"{prefix}_{ann_id}.pt")
                 except FileNotFoundError:
+                    pass
+            meta_path = Path(f"{prefix}_meta.json")
+            if meta_path.exists():
+                try:
+                    with open(meta_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    hp.num_classes = int(data.get("num_classes", hp.num_classes))
+                except (OSError, ValueError, json.JSONDecodeError):
                     pass
         elif op == "SAVE_PROJECT":
             json_path = tokens[1] if len(tokens) > 1 else "project.json"
@@ -134,7 +149,7 @@ class RedundantNeuralIP:
             }
 
         with open(json_path, "w", encoding="utf-8") as f:
-            json.dump({"anns": project}, f, indent=2)
+            json.dump({"anns": project, "num_classes": hp.num_classes}, f, indent=2)
 
     # ------------------------------------------------------------------
     # CONFIG_ANN helpers
@@ -146,6 +161,16 @@ class RedundantNeuralIP:
         cmd = tokens[1]
         # Legacy layer instructions are ignored; only FINALIZE is required to create the ANN
         if cmd == "FINALIZE":
+            meta_prefix = tokens[3] if len(tokens) >= 4 else None
+            if meta_prefix:
+                meta_path = Path(f"{meta_prefix}_meta.json")
+                if meta_path.exists():
+                    try:
+                        with open(meta_path, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                        hp.num_classes = int(data.get("num_classes", hp.num_classes))
+                    except (OSError, ValueError, json.JSONDecodeError):
+                        pass
             if self.train_data_dir:
                 self._load_dataset()
             dropout = float(tokens[2]) if len(tokens) >= 3 else hp.dropout

@@ -21,6 +21,7 @@ import os
 import sys
 
 import numpy as np
+import pytest
 import torch
 from PIL import Image
 
@@ -52,3 +53,14 @@ def test_num_classes_updates_and_predictions_in_range(tmp_path):
     finally:
         for k, v in orig.items():
             setattr(hp, k, v)
+
+
+def test_get_num_classes_raises_when_zero():
+    orig = hp.num_classes
+    try:
+        hp.num_classes = 0
+        ip = RedundantNeuralIP()
+        with pytest.raises(ValueError):
+            ip.run_instruction("GET_NUM_CLASSES")
+    finally:
+        hp.num_classes = orig
