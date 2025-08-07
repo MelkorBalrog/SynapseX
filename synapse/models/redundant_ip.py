@@ -29,6 +29,7 @@ from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 from typing import Dict, List
+import json
 
 import matplotlib
 matplotlib.use("Agg")
@@ -83,6 +84,44 @@ class RedundantNeuralIP:
                     ann.load(f"{prefix}_{ann_id}.pt")
                 except FileNotFoundError:
                     pass
+        elif op == "SAVE_PROJECT":
+            json_path = tokens[1] if len(tokens) > 1 else "project.json"
+            prefix = tokens[2] if len(tokens) > 2 else "weights"
+            self.save_project(json_path, prefix)
+
+    # ------------------------------------------------------------------
+    # Persistence helpers
+    # ------------------------------------------------------------------
+    def save_project(self, json_path: str, weight_prefix: str = "weights") -> None:
+        """Serialise all ANNs, metrics and figures to ``json_path``.
+
+        The network weights remain in individual ``.pt`` files referenced by the
+        generated JSON so that large binary blobs do not bloat the manifest. Any
+        training figures are saved as PNG images and likewise referenced.
+        """
+
+        base = Path(json_path).resolve().parent
+        project: Dict[str, Dict[str, object]] = {}
+
+        for ann_id, ann in self.ann_map.items():
+            weight_file = f"{weight_prefix}_{ann_id}.pt"
+            ann.save(str(base / weight_file))
+
+            fig_paths: List[str] = []
+            for idx, fig in enumerate(self.figures_by_ann.get(ann_id, [])):
+                fig_name = f"{weight_prefix}_{ann_id}_fig{idx}.png"
+                fig.savefig(base / fig_name)
+                plt.close(fig)
+                fig_paths.append(fig_name)
+
+            project[str(ann_id)] = {
+                "weights": weight_file,
+                "metrics": self.metrics_by_ann.get(ann_id, {}),
+                "figures": fig_paths,
+            }
+
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump({"anns": project}, f, indent=2)
 
     # ------------------------------------------------------------------
     # CONFIG_ANN helpers

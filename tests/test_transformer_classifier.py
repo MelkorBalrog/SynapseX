@@ -18,13 +18,18 @@
 import os
 import subprocess
 import sys
+import shutil
 
+import pytest
 import torch
 
 sys.path.append(os.getcwd())
 from synapsex.models import TransformerClassifier
 
+
 def test_transformer_classifier_hw_match():
+    if shutil.which("iverilog") is None or shutil.which("vvp") is None:
+        pytest.skip("iverilog not installed")
     model = TransformerClassifier(image_size=8, num_classes=3, dropout=0.0)
     for p in model.parameters():
         torch.nn.init.constant_(p, 0.0)
