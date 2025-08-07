@@ -46,6 +46,7 @@ from synapsex.image_processing import load_process_shape_image
 
 from synapse.soc import SoC
 from synapse.tracking import Detection, SortTracker
+from synapse.constants import IMAGE_BUFFER_BASE_ADDR_BYTES
 
 
 class ScrollableNotebook(ttk.Frame):
@@ -303,10 +304,10 @@ class SynapseXGUI(tk.Tk):
             return
         processed = load_process_shape_image(path, angles=[0])[0]
         soc = SoC()
-        base_addr = 0x5000
+        base_addr_bytes = IMAGE_BUFFER_BASE_ADDR_BYTES
         for i, val in enumerate(processed):
             word = np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
-            soc.memory.write(base_addr + i, int(word))
+            soc.memory.write(base_addr_bytes // 4 + i, int(word))
         asm_lines = load_asm_file(Path("asm") / "classification.asm")
         soc.load_assembly(asm_lines)
         buf = io.StringIO()
@@ -501,10 +502,10 @@ def main() -> None:
             return
         soc = SoC()
         processed = load_process_shape_image(str(image_path), angles=[0])[0]
-        base_addr = 0x5000
+        base_addr_bytes = IMAGE_BUFFER_BASE_ADDR_BYTES
         for i, val in enumerate(processed):
             word = np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
-            soc.memory.write(base_addr + i, int(word))
+            soc.memory.write(base_addr_bytes // 4 + i, int(word))
         asm_lines = load_asm_file(Path("asm") / "classification.asm")
         soc.load_assembly(asm_lines)
         soc.run(max_steps=3000)

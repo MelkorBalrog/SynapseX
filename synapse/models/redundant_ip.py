@@ -41,6 +41,7 @@ from synapsex.config import HyperParameters, hp
 from synapsex.genetic import genetic_search
 from synapsex.neural import PyTorchANN
 from synapsex.image_processing import load_vehicle_dataset
+from synapse.constants import IMAGE_BUFFER_BASE_ADDR_BYTES
 
 
 class RedundantNeuralIP:
@@ -190,7 +191,8 @@ class RedundantNeuralIP:
         ann = self.ann_map.get(ann_id)
         if ann is None:
             return
-        addr = 0x5000
+        addr_bytes = IMAGE_BUFFER_BASE_ADDR_BYTES
+        addr = addr_bytes // 4
         in_dim = ann.hp.image_size * ann.hp.image_size
         data: List[float] = []
         for i in range(in_dim):
