@@ -80,12 +80,14 @@ class PyTorchANN:
         patience: int = 3,
         min_epochs: int = 5,
         val_split: float = 0.2,
+        show_plots: bool = True,
     ) -> Tuple[Dict[str, float], List[plt.Figure]]:
         """Train the network and return evaluation metrics and figures.
 
-        The function always generates training curves, weight heatmaps and a
-        confusion matrix for consumers such as the GUI.  Callers can decide
-        how to display or embed the returned figures."""
+        ``show_plots`` controls whether training curves, weight heatmaps and the
+        confusion matrix are displayed once optimisation finishes.  A small
+        validation split drives early stopping based on the F1 score and the
+        best model weights are restored before returning final metrics."""
 
         # Split the data into a deterministic training/validation partition so
         # early stopping decisions are based on unseen samples.
@@ -147,7 +149,8 @@ class PyTorchANN:
 
         final_metrics = self.evaluate(X, y)
 
-        # Generate figures for consumers such as the GUI.
+        # Always generate figures for consumers such as the GUI; optionally show
+        # them when ``show_plots`` is True.
         figs = [
             self._plot_training(loss_hist, acc_hist, prec_hist, rec_hist, f1_hist),
             self._plot_weights(),
@@ -155,6 +158,10 @@ class PyTorchANN:
         preds = self.predict(X).argmax(dim=1).cpu().numpy()
         figs.append(self._plot_confusion_matrix(y.cpu().numpy(), preds))
         figs = [fig for fig in figs if fig is not None]
+        if show_plots:
+            for fig in figs:
+                fig.show()
+                plt.close(fig)
 
         return final_metrics, figs
 
