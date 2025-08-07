@@ -314,13 +314,15 @@ class SynapseXGUI(tk.Tk):
             soc.run(max_steps=3000)
         out = buf.getvalue()
         result = soc.cpu.get_reg("$t9")
+        names = soc.neural_ip.class_names
+        label = names[result] if names and 0 <= result < len(names) else result
         if "Classification" not in self.network_tabs:
             sub_nb = ScrollableNotebook(self.results_nb)
             self.results_nb.add(sub_nb, text="Classification")
             self.network_tabs["Classification"] = sub_nb
         sub_nb = self.network_tabs["Classification"]
         frame, text = self._create_scrolled_text(sub_nb)
-        text.insert(tk.END, out + f"\nPredicted class: {result}\n")
+        text.insert(tk.END, out + f"\nPredicted class: {label}\n")
         text.config(state="disabled")
         sub_nb.add(frame, text=f"Run {len(sub_nb.tabs())+1}")
 
@@ -509,7 +511,9 @@ def main() -> None:
         soc.load_assembly(asm_lines)
         soc.run(max_steps=3000)
         result = soc.cpu.get_reg("$t9")
-        print(f"\nClassification Phase Completed!\nPredicted class: {result}")
+        names = soc.neural_ip.class_names
+        label = names[result] if names and 0 <= result < len(names) else result
+        print(f"\nClassification Phase Completed!\nPredicted class: {label}")
     elif mode == "track":
         if len(sys.argv) < 3:
             print("Usage: python SynapseX.py track path/to/detections.txt")
