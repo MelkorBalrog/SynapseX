@@ -22,6 +22,11 @@ import numpy as np
 import torch
 from PIL import Image
 
+try:
+    from torchvision import transforms as T
+except Exception:  # pragma: no cover - torchvision is optional
+    T = None
+
 
 def gaussian_kernel(size: int = 5, sigma: float = 1.4) -> np.ndarray:
     ax = np.linspace(-(size - 1) // 2, (size - 1) // 2, size)
@@ -205,3 +210,62 @@ def load_process_shape_image(
         ) / 255.0
         processed_images.append(norm_img.flatten())
     return processed_images
+
+
+def load_process_vehicle_image(
+    path: str,
+    target_size: int = 128,
+    augment: bool = False,
+) -> torch.Tensor:
+    """Load an RGB image and preprocess it for vehicle classification.
+
+    Parameters
+    ----------
+    path: str
+        Path to the image file.
+    target_size: int, optional
+        Final width and height in pixels. Defaults to ``128``.
+    augment: bool, optional
+        If ``True`` random horizontal flips, slight scaling and brightness
+        jitter are applied. Defaults to ``False``.
+
+    Returns
+    -------
+    torch.Tensor
+        A normalized tensor of shape ``(3, target_size, target_size)``.
+    """
+
+    img = Image.open(path).convert("RGB")
+
+    if T is not None:
+        transforms_list = [T.Resize((target_size, target_size))]
+        if augment:
+            transforms_list.extend(
+                [
+                    T.RandomHorizontalFlip(),
+                    T.RandomAffine(degrees=0, scale=(0.9, 1.1)),
+                    T.ColorJitter(brightness=0.2),
+                ]
+            )
+        transforms_list.append(T.ToTensor())
+        tensor = T.Compose(transforms_list)(img)
+    else:  # Fallback when torchvision is not available
+        if augment:
+            if np.random.rand() > 0.5:
+                img = img.transpose(Image.FLIP_LEFT_RIGHT)
+            scale = np.random.uniform(0.9, 1.1)
+            new_size = int(target_size * scale)
+            img = img.resize((new_size, new_size), Image.BICUBIC)
+            if new_size != target_size:
+                img = img.resize((target_size, target_size), Image.BICUBIC)
+            enhancer = ImageEnhance.Brightness(img)
+            img = enhancer.enhance(np.random.uniform(0.8, 1.2))
+        else:
+            img = img.resize((target_size, target_size), Image.BICUBIC)
+        arr = np.array(img, dtype=np.float32) / 255.0
+        tensor = torch.from_numpy(arr.transpose(2, 0, 1))
+
+    mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+    std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+    tensor = (tensor - mean) / std
+    return tensor

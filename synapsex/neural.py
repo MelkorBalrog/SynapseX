@@ -54,20 +54,21 @@ class PyTorchANN:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = TransformerClassifier(
             self.hp.image_size,
-            num_classes=3,
+            num_classes=self.hp.num_classes,
             dropout=self.hp.dropout,
             num_layers=self.hp.num_layers,
             nhead=self.hp.nhead,
+            in_channels=self.hp.image_channels,
         ).to(self.device)
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
     def _format_input(self, X: torch.Tensor) -> torch.Tensor:
-        """Reshape tensors to ``(N, 1, image_size, image_size)``.
+        """Reshape tensors to ``(N, image_channels, image_size, image_size)``.
 
         Training and inference code often provides flattened images of shape
-        ``(N, image_size * image_size)``.  The transformer-based classifier,
+        ``(N, image_channels * image_size * image_size)``.  The transformer-based classifier,
         however, expects 4D image tensors.  This helper centralises the
         conversion so all call sites consistently feed the network correctly
         shaped inputs.
@@ -76,9 +77,9 @@ class PyTorchANN:
         if X.dim() == 1:
             X = X.unsqueeze(0)
         if X.dim() == 2:
-            return X.view(-1, 1, self.hp.image_size, self.hp.image_size)
-        if X.dim() == 3 and X.size(1) == 1:
-            return X.view(-1, 1, self.hp.image_size, self.hp.image_size)
+            return X.view(-1, self.hp.image_channels, self.hp.image_size, self.hp.image_size)
+        if X.dim() == 3 and X.size(1) == self.hp.image_channels:
+            return X.view(-1, self.hp.image_channels, self.hp.image_size, self.hp.image_size)
         if X.dim() == 4:
             return X
         raise ValueError(f"Unexpected input shape {tuple(X.shape)}")
@@ -274,10 +275,11 @@ class PyTorchANN:
                             break
             self.model = TransformerClassifier(
                 self.hp.image_size,
-                num_classes=3,
+                num_classes=self.hp.num_classes,
                 dropout=self.hp.dropout,
                 num_layers=self.hp.num_layers,
                 nhead=self.hp.nhead,
+                in_channels=self.hp.image_channels,
             ).to(self.device)
             # Allow loading models saved without positional embeddings
             self.model.load_state_dict(state["state_dict"], strict=False)
@@ -291,10 +293,11 @@ class PyTorchANN:
                         break
             self.model = TransformerClassifier(
                 self.hp.image_size,
-                num_classes=3,
+                num_classes=self.hp.num_classes,
                 dropout=self.hp.dropout,
                 num_layers=self.hp.num_layers,
                 nhead=self.hp.nhead,
+                in_channels=self.hp.image_channels,
             ).to(self.device)
             self.model.load_state_dict(state, strict=False)
 

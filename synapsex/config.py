@@ -20,6 +20,8 @@ from dataclasses import dataclass
 @dataclass
 class HyperParameters:
     image_size: int = 28
+    image_channels: int = 1
+    num_classes: int = 3
     dropout: float = 0.2
     learning_rate: float = 1e-3
     epochs: int = 10
