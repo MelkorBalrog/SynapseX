@@ -234,6 +234,21 @@ class RedundantNeuralIP:
                 return None
             data_path = Path(self.train_data_dir) / "data.npy"
             labels_path = Path(self.train_data_dir) / "labels.npy"
+
+            # Determine how many original images exist so we can verify that any
+            # cached ``.npy`` files include the expected rotation
+            # augmentation.  ``load_vehicle_dataset`` rotates each image in
+            # 5° steps, yielding 72 samples per source image.
+            img_exts = {".png", ".jpg", ".jpeg", ".bmp"}
+            root = Path(self.train_data_dir)
+            base_count = 0
+            for cls in root.iterdir():
+                if cls.is_dir():
+                    for p in cls.iterdir():
+                        if p.suffix.lower() in img_exts:
+                            base_count += 1
+            expected_len = base_count * (360 // 5)
+
             if not data_path.exists() or not labels_path.exists():
                 X, y = load_vehicle_dataset(self.train_data_dir, hp.image_size)
                 np.save(data_path, X.numpy())
@@ -241,6 +256,15 @@ class RedundantNeuralIP:
             else:
                 X = torch.from_numpy(np.load(data_path).astype(np.float32))
                 y = torch.from_numpy(np.load(labels_path).astype(np.int64))
+
+                # If the cached dataset does not match the expected augmented
+                # size, regenerate it with rotations enabled so training sees
+                # the expanded sample count.
+                if len(X) != expected_len:
+                    X, y = load_vehicle_dataset(self.train_data_dir, hp.image_size)
+                    np.save(data_path, X.numpy())
+                    np.save(labels_path, y.numpy())
+
             self._cached_dataset = (X, y)
         return self._cached_dataset
 
