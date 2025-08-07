@@ -25,6 +25,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from torch import nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 
 from .config import hp, HyperParameters
@@ -82,6 +83,41 @@ class PyTorchANN:
         if X.dim() == 4:
             return X
         raise ValueError(f"Unexpected input shape {tuple(X.shape)}")
+
+    def _generalized_box_iou(
+        self, boxes1: torch.Tensor, boxes2: torch.Tensor
+    ) -> torch.Tensor:
+        """Return the pairwise generalized IoU for corresponding boxes.
+
+        Both inputs must be ``(N, 4)`` tensors in ``(x1, y1, x2, y2)`` format.
+        ``torchvision`` is intentionally avoided so this helper works in
+        environments where the dependency is not installed.
+        """
+
+        if boxes1.numel() == 0 or boxes2.numel() == 0:
+            return torch.zeros((boxes1.size(0),), device=boxes1.device)
+
+        x1 = torch.max(boxes1[:, 0], boxes2[:, 0])
+        y1 = torch.max(boxes1[:, 1], boxes2[:, 1])
+        x2 = torch.min(boxes1[:, 2], boxes2[:, 2])
+        y2 = torch.min(boxes1[:, 3], boxes2[:, 3])
+        inter = (x2 - x1).clamp(min=0) * (y2 - y1).clamp(min=0)
+
+        area1 = (boxes1[:, 2] - boxes1[:, 0]).clamp(min=0) * (
+            boxes1[:, 3] - boxes1[:, 1]
+        ).clamp(min=0)
+        area2 = (boxes2[:, 2] - boxes2[:, 0]).clamp(min=0) * (
+            boxes2[:, 3] - boxes2[:, 1]
+        ).clamp(min=0)
+        union = area1 + area2 - inter + 1e-7
+        iou = inter / union
+
+        cx1 = torch.min(boxes1[:, 0], boxes2[:, 0])
+        cy1 = torch.min(boxes1[:, 1], boxes2[:, 1])
+        cx2 = torch.max(boxes1[:, 2], boxes2[:, 2])
+        cy2 = torch.max(boxes1[:, 3], boxes2[:, 3])
+        c_area = (cx2 - cx1).clamp(min=0) * (cy2 - cy1).clamp(min=0) + 1e-7
+        return iou - (c_area - union) / c_area
 
     def train(
         self,
@@ -184,6 +220,51 @@ class PyTorchANN:
 
         return final_metrics, figs
 
+    def train_detector(
+        self,
+        images: torch.Tensor,
+        targets: Dict[str, torch.Tensor],
+        *,
+        optimizer: Optional[torch.optim.Optimizer] = None,
+    ) -> Dict[str, float]:
+        """Train an object detector for one step and return loss values.
+
+        Parameters
+        ----------
+        images:
+            Input batch of images.
+        targets:
+            Dictionary with ``boxes`` (``N x 4``) and ``labels`` (``N``)
+            tensors containing the ground truth annotations.
+        optimizer:
+            Optional optimizer.  A default Adam instance is created when
+            ``None``.
+        """
+
+        self.model.train()
+        images = self._format_input(images).to(self.device)
+        gt_boxes = targets["boxes"].to(self.device)
+        gt_labels = targets["labels"].to(self.device)
+        if optimizer is None:
+            optimizer = torch.optim.Adam(self.model.parameters(), lr=self.hp.learning_rate)
+
+        optimizer.zero_grad()
+        outputs = self.model(images)
+        if not isinstance(outputs, dict) or "logits" not in outputs or "boxes" not in outputs:
+            raise ValueError("Model must return a dict with 'logits' and 'boxes' keys")
+
+        cls_loss = F.cross_entropy(outputs["logits"], gt_labels)
+        giou = self._generalized_box_iou(outputs["boxes"], gt_boxes)
+        reg_loss = 1 - giou.mean()
+        loss = cls_loss + reg_loss
+        loss.backward()
+        optimizer.step()
+
+        return {
+            "classification_loss": float(cls_loss.item()),
+            "regression_loss": float(reg_loss.item()),
+        }
+
     def predict(self, X: torch.Tensor, mc_dropout: bool = False) -> torch.Tensor:
         X = self._format_input(X).to(self.device)
         if mc_dropout:
@@ -198,6 +279,35 @@ class PyTorchANN:
             with torch.no_grad():
                 logits = self.model(X)
             return nn.functional.softmax(logits, dim=1).cpu()
+
+    def detect_objects(self, X: torch.Tensor) -> Dict[str, torch.Tensor]:
+        """Run the underlying model and return raw detection outputs.
+
+        The default implementation simply raises ``NotImplementedError`` as
+        ``PyTorchANN`` ships with a classifier.  Subclasses or external code can
+        override this method with an object detection model returning a
+        dictionary containing ``boxes`` (``N x 4``), ``scores`` and optional
+        ``labels`` tensors.
+        """
+
+        raise NotImplementedError("Object detection model not implemented")
+
+    def infer_objects(
+        self, X: torch.Tensor, *, conf_thresh: Optional[float] = None
+    ) -> Dict[str, torch.Tensor]:
+        """Detect objects and filter out low confidence predictions."""
+
+        thresh = self.hp.conf_thresh if conf_thresh is None else conf_thresh
+        outputs = self.detect_objects(X)
+        scores = outputs.get("scores")
+        if scores is None:
+            raise ValueError("Detection output must contain 'scores'")
+        keep = scores >= thresh
+        filtered = {
+            k: v[keep] if isinstance(v, torch.Tensor) and v.shape[0] == scores.shape[0] else v
+            for k, v in outputs.items()
+        }
+        return filtered
 
     def evaluate(self, X: torch.Tensor, y: torch.Tensor) -> Dict[str, float]:
         """Return accuracy, precision, recall and F1 for the given dataset."""
