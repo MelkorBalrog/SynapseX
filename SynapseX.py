@@ -45,6 +45,7 @@ import numpy as np
 from synapsex.image_processing import load_process_shape_image
 
 from synapse.soc import SoC
+from synapse.tracking import Detection, SortTracker
 
 
 class ScrollableNotebook(ttk.Frame):
@@ -508,8 +509,30 @@ def main() -> None:
         soc.run(max_steps=3000)
         result = soc.cpu.get_reg("$t9")
         print(f"\nClassification Phase Completed!\nPredicted class: {result}")
+    elif mode == "track":
+        if len(sys.argv) < 3:
+            print("Usage: python SynapseX.py track path/to/detections.txt")
+            return
+        det_file = Path(sys.argv[2])
+        if not det_file.is_file():
+            print(f"Detections file '{det_file}' not found.")
+            return
+        frames: dict[int, list[Detection]] = {}
+        with open(det_file, "r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                frame, x1, y1, x2, y2 = map(float, line.split())
+                frames.setdefault(int(frame), []).append(
+                    Detection(np.array([x1, y1, x2, y2]))
+                )
+        tracker = SortTracker()
+        for frame in sorted(frames):
+            tracks = tracker.update(frames[frame])
+            boxes = [(t.id, t.bbox.tolist()) for t in tracks]
+            print(f"Frame {frame}: {boxes}")
     else:
-        print("Unknown mode. Use 'train', 'classify' or 'gui'.")
+        print("Unknown mode. Use 'train', 'classify', 'track' or 'gui'.")
 
 
 if __name__ == "__main__":
