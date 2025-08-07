@@ -26,13 +26,41 @@ import numpy as np
 
 from synapsex.image_processing import load_process_shape_image
 
-try:  # Python <=3.10 ships scrolledtext as a submodule
-    from tkinter.scrolledtext import ScrolledText
-except Exception:  # pragma: no cover - fallback for some platforms
-    import tkinter.scrolledtext as _scrolledtext
-    ScrolledText = _scrolledtext.ScrolledText
-
 from synapse.soc import SoC
+
+
+class ScrollableNotebook(ttk.Frame):
+    """A ``ttk.Notebook`` with a horizontal scrollbar for overflowing tabs."""
+
+    def __init__(self, master, **kwargs):
+        super().__init__(master)
+        self.canvas = tk.Canvas(self, highlightthickness=0)
+        self.h_scroll = ttk.Scrollbar(self, orient=tk.HORIZONTAL, command=self.canvas.xview)
+        self.canvas.configure(xscrollcommand=self.h_scroll.set)
+        self.notebook = ttk.Notebook(self.canvas, **kwargs)
+        self.canvas.create_window((0, 0), window=self.notebook, anchor="nw")
+        self.canvas.pack(fill=tk.BOTH, expand=1)
+        self.h_scroll.pack(fill=tk.X)
+        self.notebook.bind("<Configure>", self._on_configure)
+
+    def _on_configure(self, _event) -> None:
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    # proxy common notebook methods
+    def add(self, child, **kw):
+        return self.notebook.add(child, **kw)
+
+    def tabs(self):
+        return self.notebook.tabs()
+
+    def select(self, tab=None):
+        return self.notebook.select(tab)
+
+    def nametowidget(self, name):
+        return self.notebook.nametowidget(name)
+
+    def bind(self, sequence=None, func=None, add=None):
+        return self.notebook.bind(sequence, func, add)
 
 
 def load_asm_file(path: str | Path) -> list[str]:
@@ -97,9 +125,9 @@ class SynapseXGUI(tk.Tk):
         self.asm_frame.columnconfigure(0, weight=1)
         left_paned.add(self.asm_frame, weight=3)
 
-        self.results_nb = ttk.Notebook(left_paned)
+        self.results_nb = ScrollableNotebook(left_paned)
         left_paned.add(self.results_nb, weight=2)
-        self.network_tabs: dict[str, ttk.Notebook] = {}
+        self.network_tabs: dict[str, ScrollableNotebook] = {}
 
         ttk.Label(right, text="Assembly Programs").pack(anchor="w", padx=5, pady=(5, 0))
         self.asm_tree = ttk.Treeview(right, show="tree")
@@ -119,6 +147,20 @@ class SynapseXGUI(tk.Tk):
 
         for asm_path in sorted(Path("asm").glob("*.asm")):
             self.asm_tree.insert("", tk.END, iid=str(asm_path), text=asm_path.name)
+
+    def _create_scrolled_text(self, parent: tk.Widget) -> tuple[ttk.Frame, tk.Text]:
+        """Return a text widget with horizontal and vertical scrollbars."""
+        frame = ttk.Frame(parent)
+        text = tk.Text(frame, wrap="none", font=("Segoe UI", 10))
+        x_scroll = ttk.Scrollbar(frame, orient="horizontal", command=text.xview)
+        y_scroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
+        text.configure(xscrollcommand=x_scroll.set, yscrollcommand=y_scroll.set)
+        text.grid(row=0, column=0, sticky="nsew")
+        y_scroll.grid(row=0, column=1, sticky="ns")
+        x_scroll.grid(row=1, column=0, sticky="ew")
+        frame.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+        return frame, text
 
     def choose_data_dir(self) -> None:
         path = filedialog.askdirectory(title="Select Training Data Directory")
@@ -176,7 +218,8 @@ class SynapseXGUI(tk.Tk):
         if not path:
             return
         processed_dir = Path.cwd() / "processed"
-        processed = load_process_shape_image(path, out_dir=processed_dir, angles=[0])[0]
+        processed_imgs = load_process_shape_image(path, out_dir=processed_dir, save=True)
+        processed = processed_imgs[0]
         soc = SoC()
         base_addr = 0x5000
         for i, val in enumerate(processed):
@@ -190,15 +233,23 @@ class SynapseXGUI(tk.Tk):
         out = buf.getvalue()
         result = soc.cpu.get_reg("$t9")
         if "Classification" not in self.network_tabs:
-            sub_nb = ttk.Notebook(self.results_nb)
+            sub_nb = ScrollableNotebook(self.results_nb)
             self.results_nb.add(sub_nb, text="Classification")
             self.network_tabs["Classification"] = sub_nb
         sub_nb = self.network_tabs["Classification"]
-        text = ScrolledText(sub_nb, wrap="word", font=("Segoe UI", 10))
+        frame, text = self._create_scrolled_text(sub_nb)
         text.insert(tk.END, out + f"\nPredicted class: {result}\n")
         text.config(state="disabled")
-        sub_nb.add(text, text=f"Run {len(sub_nb.tabs())+1}")
-        sub_nb.select(text)
+        sub_nb.add(frame, text=f"Run {len(sub_nb.tabs())+1}")
+
+        img_arr = (processed.reshape(28, 28) * 255).astype(np.uint8)
+        proc_photo = ImageTk.PhotoImage(Image.fromarray(img_arr))
+        img_lbl = ttk.Label(sub_nb, image=proc_photo)
+        img_lbl.image = proc_photo
+        self._figure_images.append(proc_photo)
+        sub_nb.add(img_lbl, text="Processed")
+
+        sub_nb.select(frame)
         self.results_nb.select(sub_nb)
 
     def menu_save_report(self) -> None:
@@ -206,11 +257,20 @@ class SynapseXGUI(tk.Tk):
         if not current:
             return
         widget = self.nametowidget(current)
-        if isinstance(widget, ttk.Notebook):
+        if isinstance(widget, ScrollableNotebook):
+            sub_widget = widget.nametowidget(widget.select())
+        elif isinstance(widget, ttk.Notebook):
             sub_widget = widget.nametowidget(widget.select())
         else:
             sub_widget = widget
-        if not isinstance(sub_widget, (tk.Text, ScrolledText)):
+        if isinstance(sub_widget, ttk.Frame):
+            for child in sub_widget.winfo_children():
+                if isinstance(child, tk.Text):
+                    sub_widget = child
+                    break
+            else:
+                sub_widget = None
+        if not isinstance(sub_widget, tk.Text):
             return
         content = sub_widget.get("1.0", tk.END)
         path = filedialog.asksaveasfilename(
@@ -271,15 +331,15 @@ class SynapseXGUI(tk.Tk):
             out += f"\nPredicted class: {soc.neural_ip.last_result}\n"
         net_name = asm_path.stem
         if net_name not in self.network_tabs:
-            sub_nb = ttk.Notebook(self.results_nb)
+            sub_nb = ScrollableNotebook(self.results_nb)
             self.results_nb.add(sub_nb, text=net_name)
             self.network_tabs[net_name] = sub_nb
         sub_nb = self.network_tabs[net_name]
-        text = ScrolledText(sub_nb, wrap="word", font=("Segoe UI", 10))
+        frame, text = self._create_scrolled_text(sub_nb)
         text.insert(tk.END, out)
         text.config(state="disabled")
-        sub_nb.add(text, text=f"Run {len(sub_nb.tabs())+1}")
-        sub_nb.select(text)
+        sub_nb.add(frame, text=f"Run {len(sub_nb.tabs())+1}")
+        sub_nb.select(frame)
         self.results_nb.select(sub_nb)
 
         # Add generated figures for each ANN as tabs within its own notebook
