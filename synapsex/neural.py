@@ -1,15 +1,11 @@
 import os
-import sys
 from dataclasses import replace
 from typing import Dict, Tuple, List, Optional
 
 import matplotlib
 
-# Only fall back to a non-interactive backend when running headless on
-# platforms that honour the ``DISPLAY`` variable (i.e. Unix).  Windows users
-# typically have a display even when ``DISPLAY`` is unset, so we avoid forcing
-# the ``Agg`` backend there.
-if os.environ.get("DISPLAY", "") == "" and sys.platform != "win32":
+# Use a non-interactive backend only when no display server is available.
+if os.environ.get("DISPLAY", "") == "":
     matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -81,8 +77,8 @@ class PyTorchANN:
         min_epochs: int = 5,
         val_split: float = 0.2,
         show_plots: bool = True,
-    ) -> Tuple[Dict[str, float], List[plt.Figure]]:
-        """Train the network and return evaluation metrics and figures.
+    ) -> Dict[str, float]:
+        """Train the network and return evaluation metrics.
 
         ``show_plots`` controls whether training curves, weight heatmaps and the
         confusion matrix are displayed once optimisation finishes.  A small
@@ -161,7 +157,6 @@ class PyTorchANN:
         if show_plots:
             for fig in figs:
                 fig.show()
-                plt.close(fig)
 
         return final_metrics, figs
 
