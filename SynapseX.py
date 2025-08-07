@@ -37,8 +37,9 @@ from contextlib import redirect_stdout
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, ttk
-from PIL import Image, ImageTk
-import matplotlib.pyplot as plt
+from tkinter.scrolledtext import ScrolledText
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
 import numpy as np
 
 from synapsex.image_processing import load_process_shape_image
@@ -98,10 +99,6 @@ class SynapseXGUI(tk.Tk):
         self.current_asm_path: Path | None = None
         self._build_menu()
         self._build_ui()
-        # keep references to PhotoImage objects keyed by ANN notebook so they
-        # remain valid while displayed; this also lets us release previous
-        # images when retraining
-        self._figure_images: dict[str, list[ImageTk.PhotoImage]] = {}
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self)
@@ -261,12 +258,19 @@ class SynapseXGUI(tk.Tk):
         text.config(state="disabled")
         sub_nb.add(frame, text=f"Run {len(sub_nb.tabs())+1}")
 
-        img_arr = (processed.reshape(28, 28) * 255).astype(np.uint8)
-        proc_photo = ImageTk.PhotoImage(Image.fromarray(img_arr))
-        img_lbl = ttk.Label(sub_nb, image=proc_photo)
-        img_lbl.image = proc_photo
-        self._figure_images.append(proc_photo)
-        sub_nb.add(img_lbl, text="Processed")
+        img_arr = processed.reshape(28, 28)
+        fig = Figure(figsize=(2, 2))
+        ax = fig.add_subplot(111)
+        ax.imshow(img_arr, cmap="gray")
+        ax.axis("off")
+        try:
+            fig_frame = ttk.Frame(sub_nb)
+            canvas = FigureCanvasTkAgg(fig, fig_frame)
+            canvas.draw()
+            canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
+            sub_nb.add(fig_frame, text="Processed")
+        except tk.TclError:
+            pass
 
         sub_nb.select(frame)
         self.results_nb.select(sub_nb)
@@ -343,8 +347,11 @@ class SynapseXGUI(tk.Tk):
         asm_lines = load_asm_file(asm_path)
         soc.load_assembly(asm_lines)
         buf = io.StringIO()
-        with redirect_stdout(buf):
-            soc.run(max_steps=3000)
+        try:
+            with redirect_stdout(buf):
+                soc.run(max_steps=3000)
+        except tk.TclError as exc:
+            buf.write(f"\nTk error: {exc}\n")
         out = buf.getvalue()
         if soc.neural_ip.last_result is not None:
             out += f"\nPredicted class: {soc.neural_ip.last_result}\n"
@@ -371,12 +378,11 @@ class SynapseXGUI(tk.Tk):
                 self.network_tabs[key] = ann_nb
             ann_nb = self.network_tabs[key]
 
-            # Remove old tabs and image references for this ANN to free memory
+            # Remove old tabs for this ANN to free memory
             for tab in ann_nb.tabs():
+                widget = ann_nb.nametowidget(tab)
                 ann_nb.forget(tab)
-                ann_nb.nametowidget(tab).destroy()
-            self._figure_images.pop(key, None)
-            images: list[ImageTk.PhotoImage] = []
+                widget.destroy()
 
             metrics = soc.neural_ip.metrics_by_ann.get(ann_id)
             if metrics:
@@ -386,30 +392,14 @@ class SynapseXGUI(tk.Tk):
                 metric_txt.config(state="disabled")
                 ann_nb.add(metric_txt, text="Summary")
             for fig, title in zip(figs, tab_titles):
-                buf_img = io.BytesIO()
-                fig.savefig(buf_img, format="png")
-                buf_img.seek(0)
-                image = Image.open(buf_img)
-                photo = ImageTk.PhotoImage(image)
-
                 frame = ttk.Frame(ann_nb)
-                canvas = tk.Canvas(frame, width=min(800, image.width), height=min(600, image.height))
-                hbar = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=canvas.xview)
-                vbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
-                canvas.configure(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
-                canvas.create_image(0, 0, image=photo, anchor="nw")
-                canvas.configure(scrollregion=(0, 0, image.width, image.height))
-
-                canvas.grid(row=0, column=0, sticky="nsew")
-                vbar.grid(row=0, column=1, sticky="ns")
-                hbar.grid(row=1, column=0, sticky="ew")
-                frame.rowconfigure(0, weight=1)
-                frame.columnconfigure(0, weight=1)
-
-                images.append(photo)
-                ann_nb.add(frame, text=title)
-                plt.close(fig)
-            self._figure_images[key] = images
+                try:
+                    canvas = FigureCanvasTkAgg(fig, frame)
+                    canvas.draw()
+                    canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
+                    ann_nb.add(frame, text=title)
+                except tk.TclError:
+                    frame.destroy()
 
         soc.neural_ip.figures_by_ann.clear()
         soc.neural_ip.metrics_by_ann.clear()
@@ -417,7 +407,11 @@ class SynapseXGUI(tk.Tk):
 
 def main() -> None:
     if len(sys.argv) == 1 or sys.argv[1].lower() == "gui":
-        gui = SynapseXGUI()
+        try:
+            gui = SynapseXGUI()
+        except tk.TclError as exc:
+            print(f"GUI unavailable: {exc}")
+            return
         gui.mainloop()
         return
 
