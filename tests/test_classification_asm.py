@@ -10,6 +10,8 @@ sys.path.append(os.getcwd())
 from synapse.soc import SoC
 from synapse.models.redundant_ip import RedundantNeuralIP
 from synapsex.config import hp
+import io
+from contextlib import redirect_stdout
 
 
 class MinimalNeuralIP(RedundantNeuralIP):
@@ -54,7 +56,10 @@ def test_classification_asm_majority(tmp_path):
     soc.cpu.neural_ip = soc.neural_ip
     soc.load_assembly(lines)
 
-    soc.run(max_steps=500)
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        soc.run(max_steps=500)
+    out = buf.getvalue()
 
     # GET_NUM_CLASSES result stored in $s0
     assert soc.cpu.get_reg("$s0") == 3
@@ -67,4 +72,5 @@ def test_classification_asm_majority(tmp_path):
 
     # Final majority vote computed in assembly
     assert soc.cpu.get_reg("$t9") == 1
+    assert "Final classification: b" in out
 

@@ -73,8 +73,12 @@ class CPU:
             self.running = False
             if self.neural_ip.last_result is not None:
                 result = self.get_reg("$t9")
-                label_map = {0: "A", 1: "B", 2: "Unknown"}
-                print(f"Final classification: {label_map.get(result, result)}")
+                names = getattr(self.neural_ip, "class_names", [])
+                if names and 0 <= result < len(names):
+                    print(f"Final classification: {names[result]}")
+                else:
+                    label_map = {0: "A", 1: "B", 2: "Unknown"}
+                    print(f"Final classification: {label_map.get(result, result)}")
         elif instr == "ADDI":
             rd = parts[1].rstrip(",")
             rs = parts[2].rstrip(",")
