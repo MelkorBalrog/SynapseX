@@ -15,3 +15,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from .object_detection import Detection, MultiObjectDetector, detect_objects
+
+__all__ = ["Detection", "MultiObjectDetector", "detect_objects"]
