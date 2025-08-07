@@ -3,10 +3,7 @@ from dataclasses import replace
 from typing import Dict, Tuple, List, Optional
 
 import matplotlib
-
-# Use a non-interactive backend only when no display server is available.
-if os.environ.get("DISPLAY", "") == "":
-    matplotlib.use("Agg")
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -145,18 +142,17 @@ class PyTorchANN:
 
         final_metrics = self.evaluate(X, y)
 
-        # Always generate figures for consumers such as the GUI; optionally show
-        # them when ``show_plots`` is True.
-        figs = [
-            self._plot_training(loss_hist, acc_hist, prec_hist, rec_hist, f1_hist),
-            self._plot_weights(),
-        ]
-        preds = self.predict(X).argmax(dim=1).cpu().numpy()
-        figs.append(self._plot_confusion_matrix(y.cpu().numpy(), preds))
-        figs = [fig for fig in figs if fig is not None]
+        figs: List = []
         if show_plots:
+            figs = [
+                self._plot_training(loss_hist, acc_hist, prec_hist, rec_hist, f1_hist),
+                self._plot_weights(),
+            ]
+            preds = self.predict(X).argmax(dim=1).cpu().numpy()
+            figs.append(self._plot_confusion_matrix(y.cpu().numpy(), preds))
             for fig in figs:
-                fig.show()
+                if fig is not None:
+                    fig.show()
 
         return final_metrics, figs
 
