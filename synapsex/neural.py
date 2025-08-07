@@ -475,9 +475,22 @@ class PyTorchANN:
         ax.set_xticks(range(num_classes))
         ax.set_yticks(range(num_classes))
         ax.set_title("Confusion Matrix")
-        for i in range(num_classes):
-            for j in range(num_classes):
-                ax.text(j, i, str(cm[i, j]), ha="center", va="center", color="black")
+        if num_classes == 2:
+            labels = np.array([["TN", "FP"], ["FN", "TP"]])
+            for i in range(num_classes):
+                for j in range(num_classes):
+                    ax.text(
+                        j,
+                        i,
+                        f"{labels[i, j]}: {cm[i, j]}",
+                        ha="center",
+                        va="center",
+                        color="black",
+                    )
+        else:
+            for i in range(num_classes):
+                for j in range(num_classes):
+                    ax.text(j, i, str(cm[i, j]), ha="center", va="center", color="black")
         plt.tight_layout()
         return fig
 
