@@ -159,8 +159,9 @@ def load_vehicle_dataset(
     target_size:
         Square size to which all images are resized.
     rotate:
-        If ``True`` each image is augmented with 359 additional rotations
-        covering the full 360° range.
+        If ``True`` each image is augmented with rotations every 10°
+        covering the full 360° range (36 orientations including the
+        original).
 
     Returns
     -------
@@ -183,16 +184,17 @@ def load_vehicle_dataset(
             if img_path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".bmp"}:
                 continue
             pil_img = Image.open(img_path).convert("L")
-            images.append(preprocess_vehicle_image(pil_img, target_size))
-            labels.append(class_to_idx[cls])
             if rotate:
                 bg_color = pil_img.getpixel((0, 0))
-                for angle in range(1, 360):
+                for angle in range(0, 360, 10):
                     rotated = pil_img.rotate(
                         angle, resample=resample_bicubic, expand=True, fillcolor=bg_color
                     )
                     images.append(preprocess_vehicle_image(rotated, target_size))
                     labels.append(class_to_idx[cls])
+            else:
+                images.append(preprocess_vehicle_image(pil_img, target_size))
+                labels.append(class_to_idx[cls])
     if not images:
         raise ValueError("No images found in dataset")
     X = torch.stack(images)
