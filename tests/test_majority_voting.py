@@ -43,3 +43,11 @@ def test_predict_majority_picks_mode_class():
     assert majority == 1
     assert preds[0][0] == 0
     assert preds[1][0] == 1
+
+
+def test_predict_majority_requires_two_votes():
+    ip = RedundantNeuralIP()
+    ip.ann_map = {0: DummyANN(0), 1: DummyANN(1), 2: DummyANN(2)}
+    X = np.zeros((1, 1), dtype=np.float32)
+    majority, _ = ip.predict_majority(X)
+    assert majority is None
