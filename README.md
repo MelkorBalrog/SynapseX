@@ -21,8 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 SynapseX is a small System-on-Chip (SoC) simulator paired with image-processing
 and neural-network utilities.  It runs simple assembly programs to exercise a
-virtual CPU and a neural accelerator used for training and classifying
-hand-written characters.
+virtual CPU and a neural accelerator used for training and classifying objects.
 
 ## Features
 
