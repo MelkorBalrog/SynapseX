@@ -29,5 +29,9 @@ class HyperParameters:
     mc_dropout_passes: int = 10
     num_layers: int = 2
     nhead: int = 4
+    # Object detection hyper-parameters
+    num_anchors: int = 3
+    conf_thresh: float = 0.5
+    iou_thresh: float = 0.5
 
 hp = HyperParameters()
