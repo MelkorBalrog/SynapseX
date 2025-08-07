@@ -55,6 +55,8 @@ class RedundantNeuralIP:
         # Metrics and figures generated during training keyed by ANN ID
         self.metrics_by_ann: Dict[int, Dict[str, float]] = {}
         self.figures_by_ann: Dict[int, List] = {}
+        # History of predictions for majority voting or debugging
+        self.vote_history: List[int] = []
 
     # ------------------------------------------------------------------
     # Assembly interface
@@ -226,6 +228,7 @@ class RedundantNeuralIP:
             mc_dropout=len(tokens) > 1 and tokens[1].lower() == "true",
         )
         self.last_result = int(probs.argmax(dim=1)[0])
+        self.vote_history.append(self.last_result)
         print(f"ANN {ann_id} prediction: {self.last_result}")
 
     # ------------------------------------------------------------------
