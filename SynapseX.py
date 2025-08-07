@@ -100,7 +100,6 @@ class SynapseXGUI(tk.Tk):
         self.dark_mode = False
         self._build_menu()
         self._build_ui()
-        self._set_dark_mode(False)
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self)
@@ -380,8 +379,11 @@ class SynapseXGUI(tk.Tk):
         asm_lines = load_asm_file(asm_path)
         soc.load_assembly(asm_lines)
         buf = io.StringIO()
-        with redirect_stdout(buf):
-            soc.run(max_steps=3000)
+        try:
+            with redirect_stdout(buf):
+                soc.run(max_steps=3000)
+        except tk.TclError as exc:
+            buf.write(f"\nTk error: {exc}\n")
         out = buf.getvalue()
         if soc.neural_ip.last_result is not None:
             out += f"\nPredicted class: {soc.neural_ip.last_result}\n"
