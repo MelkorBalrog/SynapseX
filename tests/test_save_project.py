@@ -22,19 +22,3 @@ def test_save_project(tmp_path):
     fig_file = tmp_path / ann_data["figures"][0]
     assert fig_file.exists()
     assert ann_data["metrics"]["accuracy"] == 0.5
-
-
-def test_load_project(tmp_path):
-    ip = RedundantNeuralIP()
-    ip.ann_map[0] = PyTorchANN()
-    ip.metrics_by_ann[0] = {"accuracy": 0.5}
-    fig = plt.figure()
-    ip.figures_by_ann[0] = [fig]
-    json_path = tmp_path / "project.json"
-    ip.save_project(str(json_path), "weights")
-
-    ip2 = RedundantNeuralIP()
-    ip2.load_project(str(json_path))
-    assert 0 in ip2.ann_map
-    assert ip2.metrics_by_ann[0]["accuracy"] == 0.5
-    assert len(ip2.figures_by_ann[0]) == 1

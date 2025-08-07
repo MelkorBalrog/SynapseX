@@ -21,8 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 SynapseX is a small System-on-Chip (SoC) simulator paired with image-processing
 and neural-network utilities.  It runs simple assembly programs to exercise a
-virtual CPU and a neural accelerator used for training and classifying
-hand-written characters.
+virtual CPU and a neural accelerator used for training and classifying objects.
 
 ## Features
 
@@ -44,6 +43,8 @@ hand-written characters.
   transformer depth to squeeze out better accuracy, recall, precision and F1.
 - **Target-metrics training.** Optimisation halts when validation F1 stalls,
   preserving the model state that achieved the strongest score.
+- **Project export.** Trained ANNs, metrics and figures can be bundled into a
+  JSON manifest that references per-network weight files for easy sharing.
 
 ## Getting Started
 
@@ -53,6 +54,80 @@ python SynapseX.py gui                # launch the GUI
 python SynapseX.py train data/        # train on images in data/
 python SynapseX.py classify img.png   # classify an image
 ```
+
+## Vehicle Classification and Object Detection
+
+### Preparing a classification dataset
+
+Place images for each vehicle type in their own folder.  The folder name becomes
+the class label:
+
+```
+data/vehicles/
+├── class8_truck/
+│   ├── img001.jpg
+│   └── ...
+├── car/
+└── motorcycle/
+```
+
+Image file names can be arbitrary as long as they live under the correct
+class-named directory.
+
+### Training the classifier
+
+```
+python SynapseX.py train data/vehicles
+```
+
+### Preparing an annotated detection dataset
+
+`load_annotated_dataset` understands both COCO and YOLO layouts.
+
+**COCO format**
+
+```
+dataset/
+├── images/
+│   ├── 0001.jpg
+│   └── ...
+└── annotations.json
+```
+
+**YOLO format**
+
+```
+dataset/
+├── images/                # image files
+├── labels/                # one .txt per image
+│   └── 0001.txt           # "class x_center y_center width height" in [0,1]
+```
+
+### Training the detector
+
+```
+python examples/train_detector.py dataset/
+```
+
+This writes a `detector.pt` checkpoint using a tiny `MultiObjectDetector`.
+
+### Running object tracking
+
+Use the demo that chains detection and tracking:
+
+```
+python examples/multitrack_demo.py path/to/video.mp4
+```
+
+Press `q` to close the window.  If you already have detections per frame, they
+can be fed to the tracker directly:
+
+```
+python SynapseX.py track detections.txt
+```
+
+Each line in `detections.txt` should contain `frame x1 y1 x2 y2` with integer
+frame numbers.
 
 ## Machine Learning Algorithms
 

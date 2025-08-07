@@ -20,6 +20,10 @@ OP_NEUR CONFIG_ANN 0 FINALIZE 0.2
 OP_NEUR CONFIG_ANN 1 FINALIZE 0.2
 OP_NEUR CONFIG_ANN 2 FINALIZE 0.2
 
+; (A1) Load class count from configuration to remain in sync with Python code
+OP_NEUR GET_NUM_CLASSES
+ADD $s0, $zero, $t9            ; $s0 holds hp.num_classes
+
 ; (B) Tune hyperparameters via a genetic algorithm
 OP_NEUR TUNE_GA 0 5 8
 OP_NEUR TUNE_GA 1 5 8

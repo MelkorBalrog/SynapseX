@@ -20,3 +20,5 @@ torch
 Pillow
 numba
 matplotlib
+opencv-python
+torchvision
