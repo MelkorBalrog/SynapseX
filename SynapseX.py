@@ -46,6 +46,7 @@ from synapsex.image_processing import load_process_shape_image
 
 from synapse.soc import SoC
 from synapse.tracking import Detection, SortTracker
+from synapse.models.redundant_ip import RedundantNeuralIP
 
 
 class ScrollableNotebook(ttk.Frame):
@@ -108,6 +109,7 @@ class SynapseXGUI(tk.Tk):
         style.theme_use("clam")
         self.current_asm_path: Path | None = None
         self.dark_mode = True
+        self.last_ip: RedundantNeuralIP | None = None
         self._build_menu()
         self._build_ui()
         self._set_dark_mode(self.dark_mode)
@@ -124,6 +126,10 @@ class SynapseXGUI(tk.Tk):
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.destroy)
         menubar.add_cascade(label="File", menu=file_menu)
+        project_menu = tk.Menu(menubar, tearoff=0)
+        project_menu.add_command(label="Save Project...", command=self.menu_save_project)
+        project_menu.add_command(label="Load Project...", command=self.menu_load_project)
+        menubar.add_cascade(label="Project", menu=project_menu)
         self.config(menu=menubar)
 
     def _build_ui(self) -> None:
@@ -291,6 +297,37 @@ class SynapseXGUI(tk.Tk):
         with open(self.current_asm_path, "w", encoding="utf-8") as f:
             f.write(self.asm_text.get("1.0", tk.END))
 
+    def _display_ann_results(self, ip: RedundantNeuralIP) -> None:
+        tab_titles = ["Metrics", "Weights", "Confusion"]
+        for ann_id, figs in ip.figures_by_ann.items():
+            key = f"ANN {ann_id}"
+            if key not in self.network_tabs:
+                ann_nb = ttk.Notebook(self.results_nb)
+                self.results_nb.add(ann_nb, text=key)
+                self.network_tabs[key] = ann_nb
+            ann_nb = self.network_tabs[key]
+
+            for tab in ann_nb.tabs():
+                widget = ann_nb.nametowidget(tab)
+                ann_nb.forget(tab)
+                widget.destroy()
+
+            metrics = ip.metrics_by_ann.get(ann_id)
+            if metrics:
+                metric_txt = ScrolledText(ann_nb, wrap="word", font=("Segoe UI", 10))
+                for name, val in metrics.items():
+                    metric_txt.insert(tk.END, f"{name}: {val:.4f}\n")
+                metric_txt.config(state="disabled")
+                ann_nb.add(metric_txt, text="Summary", sticky="nsew")
+
+            for idx, fig in enumerate(figs):
+                title = tab_titles[idx] if idx < len(tab_titles) else f"Fig {idx+1}"
+                try:
+                    frame = self._create_scrolled_figure(ann_nb, fig)
+                    ann_nb.add(frame, text=title, sticky="nsew")
+                except tk.TclError:
+                    pass
+
     def menu_load_image(self) -> None:
         path = filedialog.askopenfilename(
             title="Select Image to Classify",
@@ -337,6 +374,7 @@ class SynapseXGUI(tk.Tk):
 
         sub_nb.select(frame)
         self.results_nb.select(sub_nb)
+        self.last_ip = soc.neural_ip
 
     def menu_save_report(self) -> None:
         current = self.results_nb.select()
@@ -367,6 +405,29 @@ class SynapseXGUI(tk.Tk):
         if path:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
+
+    def menu_save_project(self) -> None:
+        if not self.last_ip or not self.last_ip.ann_map:
+            return
+        path = filedialog.asksaveasfilename(
+            title="Save Project",
+            defaultextension=".json",
+            filetypes=[("Project Files", "*.json"), ("All Files", "*.*")],
+        )
+        if path:
+            self.last_ip.save_project(path)
+
+    def menu_load_project(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Load Project",
+            filetypes=[("Project Files", "*.json"), ("All Files", "*.*")],
+        )
+        if not path:
+            return
+        ip = RedundantNeuralIP()
+        ip.load_project(path)
+        self.last_ip = ip
+        self._display_ann_results(ip)
 
     def _on_asm_modified(self, _event) -> None:
         if self.asm_text.edit_modified():
@@ -430,39 +491,8 @@ class SynapseXGUI(tk.Tk):
         sub_nb.add(frame, text=f"Run {len(sub_nb.tabs())+1}")
         sub_nb.select(frame)
         self.results_nb.select(sub_nb)
-
-        # Add generated figures for each ANN as tabs within its own notebook
-        tab_titles = ["Metrics", "Weights", "Confusion"]
-        for ann_id, figs in soc.neural_ip.figures_by_ann.items():
-            key = f"ANN {ann_id}"
-            if key not in self.network_tabs:
-                ann_nb = ttk.Notebook(self.results_nb)
-                self.results_nb.add(ann_nb, text=key)
-                self.network_tabs[key] = ann_nb
-            ann_nb = self.network_tabs[key]
-
-            # Remove old tabs for this ANN to free memory
-            for tab in ann_nb.tabs():
-                widget = ann_nb.nametowidget(tab)
-                ann_nb.forget(tab)
-                widget.destroy()
-
-            metrics = soc.neural_ip.metrics_by_ann.get(ann_id)
-            if metrics:
-                metric_txt = ScrolledText(ann_nb, wrap="word", font=("Segoe UI", 10))
-                for name, val in metrics.items():
-                    metric_txt.insert(tk.END, f"{name}: {val:.4f}\n")
-                metric_txt.config(state="disabled")
-                ann_nb.add(metric_txt, text="Summary", sticky="nsew")
-            for fig, title in zip(figs, tab_titles):
-                try:
-                    frame = self._create_scrolled_figure(ann_nb, fig)
-                    ann_nb.add(frame, text=title, sticky="nsew")
-                except tk.TclError:
-                    pass
-
-        soc.neural_ip.figures_by_ann.clear()
-        soc.neural_ip.metrics_by_ann.clear()
+        self._display_ann_results(soc.neural_ip)
+        self.last_ip = soc.neural_ip
 
 
 def main() -> None:

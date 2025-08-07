@@ -123,6 +123,45 @@ class RedundantNeuralIP:
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump({"anns": project}, f, indent=2)
 
+    def load_project(self, json_path: str) -> None:
+        """Load ANNs, metrics and figures from ``json_path``.
+
+        Existing networks and cached artefacts are discarded.  Weight files and
+        figure images are resolved relative to ``json_path``.
+        """
+
+        base = Path(json_path).resolve().parent
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        anns = data.get("anns", {})
+        self.ann_map.clear()
+        self.metrics_by_ann.clear()
+        self.figures_by_ann.clear()
+        for ann_id_str, ann_data in anns.items():
+            ann_id = int(ann_id_str)
+            ann = PyTorchANN()
+            weight_file = ann_data.get("weights")
+            if weight_file:
+                try:
+                    ann.load(str(base / weight_file))
+                except FileNotFoundError:
+                    pass
+            self.ann_map[ann_id] = ann
+            self.metrics_by_ann[ann_id] = ann_data.get("metrics", {})
+
+            figs: List = []
+            for fig_name in ann_data.get("figures", []):
+                fig_path = base / fig_name
+                if fig_path.exists():
+                    img = plt.imread(fig_path)
+                    fig = plt.figure()
+                    ax = fig.add_subplot(111)
+                    ax.imshow(img)
+                    ax.axis("off")
+                    figs.append(fig)
+            if figs:
+                self.figures_by_ann[ann_id] = figs
+
     # ------------------------------------------------------------------
     # CONFIG_ANN helpers
     # ------------------------------------------------------------------
