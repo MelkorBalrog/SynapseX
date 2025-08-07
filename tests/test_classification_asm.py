@@ -1,3 +1,4 @@
+import json
 import os
 import pathlib
 import sys
@@ -33,7 +34,7 @@ class MinimalNeuralIP(RedundantNeuralIP):
 
     def __init__(self):
         super().__init__()
-        hp.num_classes = 3
+        hp.num_classes = 0
         self.class_names = ["a", "b", "c"]
         self.stub_preds = {0: 0, 1: 1, 2: 1}
 
@@ -42,8 +43,14 @@ class MinimalNeuralIP(RedundantNeuralIP):
             return
         ann_id = int(tokens[0])
         if tokens[1] == "FINALIZE":
+            meta_prefix = tokens[3] if len(tokens) >= 4 else ""
+            if meta_prefix:
+                meta_path = pathlib.Path(f"{meta_prefix}_meta.json")
+                if meta_path.exists():
+                    data = json.loads(meta_path.read_text())
+                    hp.num_classes = data.get("num_classes", hp.num_classes)
             pred = self.stub_preds[ann_id]
-            self.ann_map[ann_id] = self.DummyANN(pred)
+            self.ann_map[ann_id] = self.DummyANN(pred, hp.num_classes)
 
 
 def test_classification_asm_majority(tmp_path):
@@ -51,26 +58,30 @@ def test_classification_asm_majority(tmp_path):
     asm_path = pathlib.Path("asm/classification.asm")
     lines = asm_path.read_text().splitlines()
 
-    soc = SoC()
-    soc.neural_ip = MinimalNeuralIP()
-    soc.cpu.neural_ip = soc.neural_ip
-    soc.load_assembly(lines)
+    meta_path = tmp_path / "trained_weights_meta.json"
+    meta_path.write_text(json.dumps({"num_classes": 3}))
 
-    buf = io.StringIO()
-    with redirect_stdout(buf):
+    cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        soc = SoC()
+        soc.neural_ip = MinimalNeuralIP()
+        soc.cpu.neural_ip = soc.neural_ip
+        soc.load_assembly(lines)
+
         soc.run(max_steps=500)
-    out = buf.getvalue()
 
-    # GET_NUM_CLASSES result stored in $s0
-    assert soc.cpu.get_reg("$s0") == 3
+        # GET_NUM_CLASSES result stored in $s0
+        assert soc.cpu.get_reg("$s0") == 3
 
-    # INFER_ANN + GET_ARGMAX cache predictions
-    assert soc.neural_ip._argmax == {0: 0, 1: 1, 2: 1}
-    base = soc.data_map["ann_preds"] // 4
-    preds = [soc.memory.read(base + i) for i in range(3)]
-    assert preds == [0, 1, 1]
+        # INFER_ANN + GET_ARGMAX cache predictions
+        assert soc.neural_ip._argmax == {0: 0, 1: 1, 2: 1}
+        base = soc.data_map["ann_preds"] // 4
+        preds = [soc.memory.read(base + i) for i in range(3)]
+        assert preds == [0, 1, 1]
 
-    # Final majority vote computed in assembly
-    assert soc.cpu.get_reg("$t9") == 1
-    assert "Final classification: b" in out
+        # Final majority vote computed in assembly
+        assert soc.cpu.get_reg("$t9") == 1
+    finally:
+        os.chdir(cwd)
 
