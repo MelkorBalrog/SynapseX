@@ -303,7 +303,8 @@ class SynapseXGUI(tk.Tk):
         if not path:
             return
         processed = load_process_shape_image(path, angles=[0])[0]
-        soc = SoC()
+        train_dir = self.data_entry.get() or None
+        soc = SoC(train_data_dir=train_dir)
         base_addr_bytes = IMAGE_BUFFER_BASE_ADDR_BYTES
         for i, val in enumerate(processed):
             word = np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
