@@ -219,9 +219,12 @@ class RedundantNeuralIP:
         preds = {}
         for ann_id, ann in self.ann_map.items():
             probs = ann.predict(torch.from_numpy(X))
-            preds[ann_id] = probs.argmax(dim=1).numpy()
-        votes = [preds[ann_id][0] for ann_id in self.ann_map]
-        majority = Counter(votes).most_common(1)[0][0]
+            preds[ann_id] = probs.argmax(dim=1).cpu().numpy()
+
+        # ``Counter`` struggles with NumPy scalar types, so convert each vote to
+        # a native ``int`` before tallying the results.
+        votes = [int(preds[ann_id][0]) for ann_id in self.ann_map]
+        majority = int(Counter(votes).most_common(1)[0][0]) if votes else None
         return majority, preds
 
     # ------------------------------------------------------------------
