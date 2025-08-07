@@ -73,6 +73,9 @@ reasoning without heavy mathematics.
    uncertainty.
 
 ```mermaid
+%% GNU General Public License
+%% Author: Miguel Marina <karel.capek.robotics@gmail.com>
+%% LinkedIn: https://www.linkedin.com/in/progman32/
 flowchart TD
     X[Input x] --> P1[Pass 1\nDropout ON]
     X --> P2[Pass 2\nDropout ON]
@@ -109,6 +112,9 @@ lightweight Bayesian approximation with just a single trained model.
 #### ANN0 – Transformer Classifier
 
 ```mermaid
+%% GNU General Public License
+%% Author: Miguel Marina <karel.capek.robotics@gmail.com>
+%% LinkedIn: https://www.linkedin.com/in/progman32/
 graph TD
     I0[Input 28x28] --> P[Patch Embedding]
     P --> T1[Transformer]
@@ -121,6 +127,9 @@ graph TD
 #### ANN1 – Dense LeakyReLU Network
 
 ```mermaid
+%% GNU General Public License
+%% Author: Miguel Marina <karel.capek.robotics@gmail.com>
+%% LinkedIn: https://www.linkedin.com/in/progman32/
 graph TD
     I1[Input 784] --> L1[256 LeakyReLU]
     L1 --> L2[2560 LeakyReLU]
@@ -134,6 +143,9 @@ graph TD
 #### ANN2 – Combined‑Step Network
 
 ```mermaid
+%% GNU General Public License
+%% Author: Miguel Marina <karel.capek.robotics@gmail.com>
+%% LinkedIn: https://www.linkedin.com/in/progman32/
 graph TD
     I2[Input 784] --> C1[256 LeakyReLU]
     C1 --> S1[Combined Step 9256]
@@ -147,6 +159,9 @@ graph TD
 ### Majority Voting
 
 ```mermaid
+%% GNU General Public License
+%% Author: Miguel Marina <karel.capek.robotics@gmail.com>
+%% LinkedIn: https://www.linkedin.com/in/progman32/
 graph TD
     A0[ANN0] --> V[Majority\nVote]
     A1[ANN1] --> V
@@ -166,6 +181,9 @@ and forwards neural‑network commands to the accelerator via the `OP_NEUR`
 instruction.
 
 ```mermaid
+%% GNU General Public License
+%% Author: Miguel Marina <karel.capek.robotics@gmail.com>
+%% LinkedIn: https://www.linkedin.com/in/progman32/
 graph TD
     CPU((CPU)) -->|load/store| Memory[Wishbone\nMemory]
     CPU -->|OP_NEUR| Neural[Neural IP]
@@ -190,6 +208,9 @@ alternates wide and narrow fully connected layers, and ANN 2 experiments with a
 custom `COMBINED_STEP` module.  ANN 0's topology is illustrated below:
 
 ```mermaid
+%% GNU General Public License
+%% Author: Miguel Marina <karel.capek.robotics@gmail.com>
+%% LinkedIn: https://www.linkedin.com/in/progman32/
 graph LR
     I[784 inputs] --> L1[Linear 784→2352\n+LeakyReLU]
     L1 --> T1[Transformer]
@@ -201,6 +222,9 @@ graph LR
 Majority voting across the ensemble is depicted here:
 
 ```mermaid
+%% GNU General Public License
+%% Author: Miguel Marina <karel.capek.robotics@gmail.com>
+%% LinkedIn: https://www.linkedin.com/in/progman32/
 graph TD
     X[Input image] --> A0[ANN 0]
     X --> A1[ANN 1]
@@ -224,6 +248,9 @@ serialising the model weights.
 The high‑level flow is shown below:
 
 ```mermaid
+%% GNU General Public License
+%% Author: Miguel Marina <karel.capek.robotics@gmail.com>
+%% LinkedIn: https://www.linkedin.com/in/progman32/
 flowchart TD
     A[Load & preprocess images] --> B[TensorDataset & DataLoader]
     B --> C{Epoch loop}
@@ -284,6 +311,9 @@ of epochs using the specified learning rate and batch size.
 During classification the script performs the following high level steps:
 
 ```mermaid
+%% GNU General Public License
+%% Author: Miguel Marina <karel.capek.robotics@gmail.com>
+%% LinkedIn: https://www.linkedin.com/in/progman32/
 sequenceDiagram
     participant U as User
     participant S as SynapseX.py
