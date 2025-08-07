@@ -29,6 +29,7 @@ from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 from typing import Dict, List
+import json
 
 import matplotlib
 matplotlib.use("Agg")
@@ -40,7 +41,7 @@ import torch
 from synapsex.config import HyperParameters, hp
 from synapsex.genetic import genetic_search
 from synapsex.neural import PyTorchANN
-from synapsex.image_processing import load_process_shape_image
+from synapsex.image_processing import load_vehicle_dataset
 
 
 class RedundantNeuralIP:
@@ -50,7 +51,7 @@ class RedundantNeuralIP:
         self.ann_map: Dict[int, PyTorchANN] = {}
         self.last_result: int | None = None
         self.train_data_dir = train_data_dir
-        self._cached_dataset: tuple[np.ndarray, np.ndarray] | None = None
+        self._cached_dataset: tuple[torch.Tensor, torch.Tensor] | None = None
         # Metrics and figures generated during training keyed by ANN ID
         self.metrics_by_ann: Dict[int, Dict[str, float]] = {}
         self.figures_by_ann: Dict[int, List] = {}
@@ -83,6 +84,44 @@ class RedundantNeuralIP:
                     ann.load(f"{prefix}_{ann_id}.pt")
                 except FileNotFoundError:
                     pass
+        elif op == "SAVE_PROJECT":
+            json_path = tokens[1] if len(tokens) > 1 else "project.json"
+            prefix = tokens[2] if len(tokens) > 2 else "weights"
+            self.save_project(json_path, prefix)
+
+    # ------------------------------------------------------------------
+    # Persistence helpers
+    # ------------------------------------------------------------------
+    def save_project(self, json_path: str, weight_prefix: str = "weights") -> None:
+        """Serialise all ANNs, metrics and figures to ``json_path``.
+
+        The network weights remain in individual ``.pt`` files referenced by the
+        generated JSON so that large binary blobs do not bloat the manifest. Any
+        training figures are saved as PNG images and likewise referenced.
+        """
+
+        base = Path(json_path).resolve().parent
+        project: Dict[str, Dict[str, object]] = {}
+
+        for ann_id, ann in self.ann_map.items():
+            weight_file = f"{weight_prefix}_{ann_id}.pt"
+            ann.save(str(base / weight_file))
+
+            fig_paths: List[str] = []
+            for idx, fig in enumerate(self.figures_by_ann.get(ann_id, [])):
+                fig_name = f"{weight_prefix}_{ann_id}_fig{idx}.png"
+                fig.savefig(base / fig_name)
+                plt.close(fig)
+                fig_paths.append(fig_name)
+
+            project[str(ann_id)] = {
+                "weights": weight_file,
+                "metrics": self.metrics_by_ann.get(ann_id, {}),
+                "figures": fig_paths,
+            }
+
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump({"anns": project}, f, indent=2)
 
     # ------------------------------------------------------------------
     # CONFIG_ANN helpers
@@ -119,7 +158,7 @@ class RedundantNeuralIP:
 
         # Update only the epoch count; GA-tuned learning rate and batch size are preserved
         ann.hp = replace(ann.hp, epochs=epochs)
-        metrics, figs = ann.train(torch.from_numpy(X), torch.from_numpy(y))
+        metrics, figs = ann.train(X, y)
         for old in self.figures_by_ann.get(ann_id, []):
             plt.close(old)
         self.figures_by_ann[ann_id] = figs
@@ -166,8 +205,10 @@ class RedundantNeuralIP:
         X, y = dataset
 
         best_hp, best_ann = genetic_search(
-            torch.from_numpy(X), torch.from_numpy(y),
-            generations=generations, population_size=population,
+            X,
+            y,
+            generations=generations,
+            population_size=population,
         )
         self.ann_map[ann_id] = best_ann
 
@@ -194,30 +235,12 @@ class RedundantNeuralIP:
             data_path = Path(self.train_data_dir) / "data.npy"
             labels_path = Path(self.train_data_dir) / "labels.npy"
             if not data_path.exists() or not labels_path.exists():
-                X_list: List[np.ndarray] = []
-                y_list: List[int] = []
-                letter2label = {"A": 0, "B": 1, "C": 2}
-                image_files = (
-                    sorted(Path(self.train_data_dir).glob("*.png"))
-                    + sorted(Path(self.train_data_dir).glob("*.jpg"))
-                )
-                for img_path in image_files:
-                    letter = img_path.stem.split("_")[0].upper()
-                    if letter not in letter2label:
-                        continue
-                    processed = load_process_shape_image(str(img_path))
-                    X_list.extend(processed)
-                    y_list.extend([letter2label[letter]] * len(processed))
-                if not X_list:
-                    print("No training images found; aborting training.")
-                    return None
-                X = np.stack(X_list).astype(np.float32)
-                y = np.array(y_list, dtype=np.int64)
-                np.save(data_path, X)
-                np.save(labels_path, y)
+                X, y = load_vehicle_dataset(self.train_data_dir, hp.image_size)
+                np.save(data_path, X.numpy())
+                np.save(labels_path, y.numpy())
             else:
-                X = np.load(data_path).astype(np.float32)
-                y = np.load(labels_path).astype(np.int64)
+                X = torch.from_numpy(np.load(data_path).astype(np.float32))
+                y = torch.from_numpy(np.load(labels_path).astype(np.int64))
             self._cached_dataset = (X, y)
         return self._cached_dataset
 

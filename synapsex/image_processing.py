@@ -23,6 +23,11 @@ import numpy as np
 import torch
 from PIL import Image
 
+try:
+    from torchvision import transforms as T
+except Exception:  # pragma: no cover - torchvision is optional
+    T = None
+
 
 def gaussian_kernel(size: int = 5, sigma: float = 1.4) -> np.ndarray:
     ax = np.linspace(-(size - 1) // 2, (size - 1) // 2, size)
@@ -123,6 +128,52 @@ def morph_dilate(binary_image: np.ndarray, kernel_size: int = 3, iterations: int
                     temp[i, j] = 255
         out = temp
     return out
+
+
+def preprocess_vehicle_image(path: str, target_size: int = 28) -> torch.Tensor:
+    """Convert ``path`` to a flattened grayscale tensor of size ``target_size``."""
+    try:
+        resample = Image.Resampling.LANCZOS
+    except AttributeError:  # pragma: no cover - Pillow < 9
+        resample = Image.LANCZOS
+    img = Image.open(path).convert("L").resize((target_size, target_size), resample=resample)
+    arr = np.array(img, dtype=np.float32) / 255.0
+    return torch.from_numpy(arr.flatten())
+
+
+def load_vehicle_dataset(root_dir: str, target_size: int = 28) -> tuple[torch.Tensor, torch.Tensor]:
+    """Load vehicle images from class-named subdirectories.
+
+    Parameters
+    ----------
+    root_dir:
+        Root directory containing one subfolder per vehicle class.
+    target_size:
+        Square size to which all images are resized.
+
+    Returns
+    -------
+    X, y:
+        ``X`` is a tensor of flattened images and ``y`` contains integer class
+        labels.
+    """
+
+    root = Path(root_dir)
+    images: List[torch.Tensor] = []
+    labels: List[int] = []
+    class_names = sorted([d.name for d in root.iterdir() if d.is_dir()])
+    class_to_idx = {name: idx for idx, name in enumerate(class_names)}
+    for cls in class_names:
+        for img_path in sorted((root / cls).glob("*")):
+            if img_path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".bmp"}:
+                continue
+            images.append(preprocess_vehicle_image(str(img_path), target_size))
+            labels.append(class_to_idx[cls])
+    if not images:
+        raise ValueError("No images found in dataset")
+    X = torch.stack(images)
+    y = torch.tensor(labels, dtype=torch.long)
+    return X, y
 
 
 def load_process_shape_image(
@@ -243,3 +294,61 @@ def load_annotated_dataset(root_dir: str) -> List[Tuple[torch.Tensor, torch.Tens
         labels = torch.tensor(labels_list, dtype=torch.int64)
         samples.append((img_tensor, boxes, labels))
     return samples
+
+def load_process_vehicle_image(
+    path: str,
+    target_size: int = 128,
+    augment: bool = False,
+) -> torch.Tensor:
+    """Load an RGB image and preprocess it for vehicle classification.
+
+    Parameters
+    ----------
+    path: str
+        Path to the image file.
+    target_size: int, optional
+        Final width and height in pixels. Defaults to ``128``.
+    augment: bool, optional
+        If ``True`` random horizontal flips, slight scaling and brightness
+        jitter are applied. Defaults to ``False``.
+
+    Returns
+    -------
+    torch.Tensor
+        A normalized tensor of shape ``(3, target_size, target_size)``.
+    """
+
+    img = Image.open(path).convert("RGB")
+
+    if T is not None:
+        transforms_list = [T.Resize((target_size, target_size))]
+        if augment:
+            transforms_list.extend(
+                [
+                    T.RandomHorizontalFlip(),
+                    T.RandomAffine(degrees=0, scale=(0.9, 1.1)),
+                    T.ColorJitter(brightness=0.2),
+                ]
+            )
+        transforms_list.append(T.ToTensor())
+        tensor = T.Compose(transforms_list)(img)
+    else:  # Fallback when torchvision is not available
+        if augment:
+            if np.random.rand() > 0.5:
+                img = img.transpose(Image.FLIP_LEFT_RIGHT)
+            scale = np.random.uniform(0.9, 1.1)
+            new_size = int(target_size * scale)
+            img = img.resize((new_size, new_size), Image.BICUBIC)
+            if new_size != target_size:
+                img = img.resize((target_size, target_size), Image.BICUBIC)
+            enhancer = ImageEnhance.Brightness(img)
+            img = enhancer.enhance(np.random.uniform(0.8, 1.2))
+        else:
+            img = img.resize((target_size, target_size), Image.BICUBIC)
+        arr = np.array(img, dtype=np.float32) / 255.0
+        tensor = torch.from_numpy(arr.transpose(2, 0, 1))
+
+    mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+    std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+    tensor = (tensor - mean) / std
+    return tensor

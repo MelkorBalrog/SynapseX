@@ -19,6 +19,7 @@ import os
 import sys
 
 import numpy as np
+import torch
 from PIL import Image
 
 sys.path.append(os.getcwd())
@@ -51,3 +52,12 @@ def test_load_annotated_dataset_yolo(tmp_path):
     assert image.shape[1:] == (10, 10)
     assert boxes.shape == (1, 4)
     assert labels.tolist() == [0]
+
+def test_load_process_vehicle_image_shape(tmp_path):
+    img = Image.fromarray(np.zeros((20, 20, 3), dtype=np.uint8))
+    path = tmp_path / "vehicle.png"
+    img.save(path)
+    tensor = load_process_vehicle_image(str(path), target_size=32, augment=False)
+    assert tensor.shape == (3, 32, 32)
+    assert tensor.dtype == torch.float32
+    assert float(tensor.max()) <= 3 and float(tensor.min()) >= -3

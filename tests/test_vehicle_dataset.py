@@ -15,19 +15,22 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from dataclasses import dataclass
+import os
+import sys
 
-@dataclass
-class HyperParameters:
-    image_size: int = 28
-    image_channels: int = 1
-    num_classes: int = 3
-    dropout: float = 0.2
-    learning_rate: float = 1e-3
-    epochs: int = 10
-    batch_size: int = 32
-    mc_dropout_passes: int = 10
-    num_layers: int = 2
-    nhead: int = 4
+import numpy as np
+from PIL import Image
 
-hp = HyperParameters()
+sys.path.append(os.getcwd())
+from synapsex.image_processing import load_vehicle_dataset
+
+
+def test_load_vehicle_dataset(tmp_path):
+    (tmp_path / "car").mkdir()
+    (tmp_path / "truck").mkdir()
+    Image.fromarray(np.zeros((10, 10), dtype=np.uint8)).save(tmp_path / "car" / "a.png")
+    Image.fromarray(np.full((10, 10), 255, dtype=np.uint8)).save(tmp_path / "truck" / "b.png")
+
+    X, y = load_vehicle_dataset(tmp_path, target_size=8)
+    assert X.shape == (2, 64)
+    assert y.tolist() == [0, 1]
