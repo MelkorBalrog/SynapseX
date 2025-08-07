@@ -6,7 +6,16 @@
 module transformer_classifier #(
     parameter IMAGE_SIZE = 28,
     parameter NUM_CLASSES = 3,
-    parameter PATCH_SIZE = IMAGE_SIZE/4
+    parameter PATCH_SIZE = IMAGE_SIZE/4,
+    parameter HEADS = 4,
+    parameter string WQ_FILE = "",
+    parameter string WK_FILE = "",
+    parameter string WV_FILE = "",
+    parameter string FF1_FILE = "",
+    parameter string FF2_FILE = "",
+    parameter string HEADW0_FILE = "",
+    parameter string HEADW1_FILE = "",
+    parameter string HEADW2_FILE = ""
 )(
     input  wire              clk,
     input  wire              rst,
@@ -21,10 +30,22 @@ module transformer_classifier #(
     localparam EMBED_DIM  = PATCH_SIZE*PATCH_SIZE;
 
     // Internal memories for patch embeddings and transformer activations
-    reg [15:0] patch_mem     [0:PATCHES-1];
+    reg [15:0] patch_mem       [0:PATCHES-1];
     reg [15:0] transformer_mem [0:PATCHES-1];
 
-    // Simple linear head weights (placeholders)
+    // Transformer weights
+    reg [15:0] wq     [0:HEADS-1];
+    reg [15:0] wk     [0:HEADS-1];
+    reg [15:0] wv     [0:HEADS-1];
+    reg [15:0] ff1    [0:1]; // [0]=weight, [1]=bias
+    reg [15:0] ff2    [0:1]; // [0]=weight, [1]=bias
+
+    wire [15:0] ff1_w = ff1[0];
+    wire [15:0] ff1_b = ff1[1];
+    wire [15:0] ff2_w = ff2[0];
+    wire [15:0] ff2_b = ff2[1];
+
+    // Simple linear head weights
     reg [15:0] head_w0 [0:PATCHES-1];
     reg [15:0] head_w1 [0:PATCHES-1];
     reg [15:0] head_w2 [0:PATCHES-1];
@@ -36,13 +57,22 @@ module transformer_classifier #(
     localparam S_HEAD      = 2'b11;
 
     reg [1:0] state;
-    integer i;
+    integer i, j, h;
     reg [15:0] patch_acc;
     reg [15:0] pixel_cnt;
     reg [15:0] patch_cnt;
     reg [31:0] sum0;
     reg [31:0] sum1;
     reg [31:0] sum2;
+
+    reg [31:0] q;
+    reg [31:0] k;
+    reg [31:0] v;
+    reg [31:0] score;
+    reg [31:0] total;
+    reg [31:0] weighted;
+    reg [31:0] head_out [0:HEADS-1];
+    reg [31:0] mh_out;
 
     // Reset and initialization
     initial begin
@@ -63,6 +93,23 @@ module transformer_classifier #(
             head_w1[i] = 0;
             head_w2[i] = 0;
         end
+        for (h = 0; h < HEADS; h = h + 1) begin
+            wq[h] = 0;
+            wk[h] = 0;
+            wv[h] = 0;
+            head_out[h] = 0;
+        end
+        ff1[0] = 1; ff1[1] = 0;
+        ff2[0] = 1; ff2[1] = 0;
+
+        if (WQ_FILE  != "") $readmemh(WQ_FILE,  wq);
+        if (WK_FILE  != "") $readmemh(WK_FILE,  wk);
+        if (WV_FILE  != "") $readmemh(WV_FILE,  wv);
+        if (FF1_FILE != "") $readmemh(FF1_FILE, ff1);
+        if (FF2_FILE != "") $readmemh(FF2_FILE, ff2);
+        if (HEADW0_FILE != "") $readmemh(HEADW0_FILE, head_w0);
+        if (HEADW1_FILE != "") $readmemh(HEADW1_FILE, head_w1);
+        if (HEADW2_FILE != "") $readmemh(HEADW2_FILE, head_w2);
     end
 
     always @(posedge clk) begin
@@ -103,9 +150,28 @@ module transformer_classifier #(
                     end
                 end
                 S_TRANSFORM: begin
-                    // Placeholder for transformer layers
+                    // Single-layer multi-head self-attention + feedforward
                     for (i = 0; i < PATCHES; i = i + 1) begin
-                        transformer_mem[i] <= patch_mem[i];
+                        for (h = 0; h < HEADS; h = h + 1) begin
+                            q = patch_mem[i] * wq[h];
+                            total = 0;
+                            weighted = 0;
+                            for (j = 0; j < PATCHES; j = j + 1) begin
+                                k = patch_mem[j] * wk[h];
+                                v = patch_mem[j] * wv[h];
+                                score = q * k;
+                                total = total + score;
+                                weighted = weighted + score * v;
+                            end
+                            if (total != 0)
+                                head_out[h] = weighted / total;
+                            else
+                                head_out[h] = 0;
+                        end
+                        mh_out = 0;
+                        for (h = 0; h < HEADS; h = h + 1)
+                            mh_out = mh_out + head_out[h];
+                        transformer_mem[i] <= (mh_out * ff1_w + ff1_b) * ff2_w + ff2_b;
                     end
                     state <= S_HEAD;
                 end

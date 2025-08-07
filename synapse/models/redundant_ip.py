@@ -1,20 +1,24 @@
 """Management of multiple ANNs with majority voting.
 
-This module now exposes a small instruction processor which mirrors the
-behaviour expected by the assembly programs.  The processor understands a
-subset of the commands from the original project and delegates the actual
-neural network work to :class:`VirtualANN` instances.
+The instruction processor mirrors the behaviour expected by the assembly
+programs.  It now delegates work to :class:`synapsex.neural.PyTorchANN`
+instances so that optimisation features such as the genetic algorithm can be
+invoked directly from assembly via new ``TUNE_GA`` commands.
 """
 
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 from typing import Dict, List
 
 import numpy as np
+import torch
 
-from .virtual_ann import VirtualANN
+from synapsex.config import HyperParameters, hp
+from synapsex.genetic import genetic_search
+from synapsex.neural import PyTorchANN
 from synapsex.image_processing import load_process_shape_image
 
 
@@ -22,13 +26,12 @@ class RedundantNeuralIP:
     """Container for multiple ANNs addressable by an ID."""
 
     def __init__(self, train_data_dir: str | None = None, show_plots: bool = True) -> None:
-        self.ann_map: Dict[int, VirtualANN] = {}
-        self.layer_defs: Dict[int, List[int]] = {}
+        self.ann_map: Dict[int, PyTorchANN] = {}
         self.last_result: int | None = None
         self.train_data_dir = train_data_dir
         self._cached_dataset: tuple[np.ndarray, np.ndarray] | None = None
         self.show_plots = show_plots
-        # figures generated during the last training run
+        # figures generated during the last training run (unused for PyTorchANN)
         self.last_figures: List = []
 
     # ------------------------------------------------------------------
@@ -42,6 +45,8 @@ class RedundantNeuralIP:
         op = tokens[0].upper()
         if op == "CONFIG_ANN":
             self._config_ann(tokens[1:])
+        elif op == "TUNE_GA":
+            self._tune_ga(tokens[1:])
         elif op == "TRAIN_ANN":
             self._train_ann(tokens[1:])
         elif op == "INFER_ANN":
@@ -66,18 +71,11 @@ class RedundantNeuralIP:
             return
         ann_id = int(tokens[0])
         cmd = tokens[1]
-        if cmd == "CREATE_LAYER" and len(tokens) >= 5:
-            in_dim = int(tokens[2])
-            out_dim = int(tokens[3])
-            # activation token ignored in this simplified implementation
-            self.layer_defs[ann_id] = [in_dim, out_dim]
-        elif cmd == "ADD_LAYER" and len(tokens) >= 4:
-            out_dim = int(tokens[2])
-            self.layer_defs.setdefault(ann_id, []).append(out_dim)
-        elif cmd == "FINALIZE":
-            layers = self.layer_defs.get(ann_id)
-            if layers and len(layers) >= 2:
-                self.ann_map[ann_id] = VirtualANN(layers)
+        # Legacy layer instructions are ignored; only FINALIZE is required to create the ANN
+        if cmd == "FINALIZE":
+            dropout = float(tokens[2]) if len(tokens) >= 3 else hp.dropout
+            hparams = HyperParameters(**{**hp.__dict__, "dropout": dropout})
+            self.ann_map[ann_id] = PyTorchANN(hparams)
 
     # ------------------------------------------------------------------
     # TRAIN_ANN helpers
@@ -87,16 +85,86 @@ class RedundantNeuralIP:
             return
         ann_id = int(tokens[0])
         epochs = int(tokens[1]) if len(tokens) > 1 else 5
+        lr = float(tokens[2]) if len(tokens) > 2 else 0.005
+        batch_size = int(tokens[3]) if len(tokens) > 3 else 16
         ann = self.ann_map.get(ann_id)
         if ann is None:
             return
-        in_dim = ann.layer_sizes[0]
-        out_dim = ann.layer_sizes[-1]
 
+        dataset = self._load_dataset()
+        if dataset is None:
+            return
+        X, y = dataset
+
+        # Update only the epoch count; GA-tuned learning rate and batch size are preserved
+        ann.hp = replace(ann.hp, epochs=epochs)
+        ann.train(torch.from_numpy(X), torch.from_numpy(y))
+
+    # ------------------------------------------------------------------
+    # INFER_ANN helpers
+    # ------------------------------------------------------------------
+    def _infer_ann(self, tokens: List[str], memory) -> None:
+        if not tokens:
+            return
+        ann_id = int(tokens[0])
+        ann = self.ann_map.get(ann_id)
+        if ann is None:
+            return
+        addr = 0x5000
+        in_dim = ann.hp.image_size * ann.hp.image_size
+        data: List[float] = []
+        for i in range(in_dim):
+            word = memory.read(addr + i)
+            data.append(np.frombuffer(np.uint32(word).tobytes(), dtype=np.float32)[0])
+        X = np.array(data, dtype=np.float32).reshape(1, -1)
+        probs = ann.predict(
+            torch.from_numpy(X),
+            mc_dropout=len(tokens) > 1 and tokens[1].lower() == "true",
+        )
+        self.last_result = int(probs.argmax(dim=1)[0])
+        print(f"ANN {ann_id} prediction: {self.last_result}")
+
+    # ------------------------------------------------------------------
+    # TUNE_GA helpers
+    # ------------------------------------------------------------------
+    def _tune_ga(self, tokens: List[str]) -> None:
+        if not tokens:
+            return
+        ann_id = int(tokens[0])
+        generations = int(tokens[1]) if len(tokens) > 1 else 5
+        population = int(tokens[2]) if len(tokens) > 2 else 8
+
+        dataset = self._load_dataset()
+        if dataset is None:
+            return
+        X, y = dataset
+
+        best_hp, best_ann = genetic_search(
+            torch.from_numpy(X), torch.from_numpy(y),
+            generations=generations, population_size=population,
+        )
+        self.ann_map[ann_id] = best_ann
+
+    # ------------------------------------------------------------------
+    # Utility
+    # ------------------------------------------------------------------
+    def predict_majority(self, X: np.ndarray):
+        preds = {}
+        for ann_id, ann in self.ann_map.items():
+            probs = ann.predict(torch.from_numpy(X))
+            preds[ann_id] = probs.argmax(dim=1).numpy()
+        votes = [preds[ann_id][0] for ann_id in self.ann_map]
+        majority = Counter(votes).most_common(1)[0][0]
+        return majority, preds
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+    def _load_dataset(self):
         if self._cached_dataset is None:
             if not self.train_data_dir:
                 print("No training data directory specified; aborting training.")
-                return
+                return None
             data_path = Path(self.train_data_dir) / "data.npy"
             labels_path = Path(self.train_data_dir) / "labels.npy"
             if not data_path.exists() or not labels_path.exists():
@@ -114,11 +182,11 @@ class RedundantNeuralIP:
                     processed = load_process_shape_image(
                         str(img_path), out_dir=Path(self.train_data_dir) / "processed"
                     )
-                    X_list.append(processed[0])
-                    y_list.append(letter2label[letter])
+                    X_list.extend(processed)
+                    y_list.extend([letter2label[letter]] * len(processed))
                 if not X_list:
                     print("No training images found; aborting training.")
-                    return
+                    return None
                 X = np.stack(X_list).astype(np.float32)
                 y = np.array(y_list, dtype=np.int64)
                 np.save(data_path, X)
@@ -127,47 +195,5 @@ class RedundantNeuralIP:
                 X = np.load(data_path).astype(np.float32)
                 y = np.load(labels_path).astype(np.int64)
             self._cached_dataset = (X, y)
-        else:
-            X, y = self._cached_dataset
-
-        if X.shape[1] != in_dim or y.max() >= out_dim:
-            print("Training data dimensions do not match ANN configuration.")
-            return
-
-        figs = ann.train_model(X, y, epochs=epochs, lr=0.005, batch_size=16)
-        self.last_figures.extend(figs)
-        if self.show_plots:
-            for fig in figs:
-                fig.show()
-
-    # ------------------------------------------------------------------
-    # INFER_ANN helpers
-    # ------------------------------------------------------------------
-    def _infer_ann(self, tokens: List[str], memory) -> None:
-        if not tokens:
-            return
-        ann_id = int(tokens[0])
-        ann = self.ann_map.get(ann_id)
-        if ann is None:
-            return
-        addr = 0x5000
-        in_dim = ann.layer_sizes[0]
-        data = []
-        for i in range(in_dim):
-            word = memory.read(addr + i)
-            data.append(np.frombuffer(np.uint32(word).tobytes(), dtype=np.float32)[0])
-        X = np.array(data, dtype=np.float32).reshape(1, -1)
-        pred = ann.predict(X)
-        self.last_result = int(pred[0])
-
-    # ------------------------------------------------------------------
-    # Utility
-    # ------------------------------------------------------------------
-    def predict_majority(self, X: np.ndarray):
-        preds = {}
-        for ann_id, ann in self.ann_map.items():
-            preds[ann_id] = ann.predict(X)
-        votes = [preds[ann_id][0] for ann_id in self.ann_map]
-        majority = Counter(votes).most_common(1)[0][0]
-        return majority, preds
+        return self._cached_dataset
 

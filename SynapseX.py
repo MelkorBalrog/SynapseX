@@ -16,7 +16,6 @@ from __future__ import annotations
 import io
 import re
 import sys
-import re
 from contextlib import redirect_stdout
 from pathlib import Path
 import tkinter as tk
@@ -114,6 +113,7 @@ class SynapseXGUI(tk.Tk):
         self.asm_text = tk.Text(self.asm_frame, wrap="none", font=("Consolas", 11))
         self.asm_text.tag_configure("instr", foreground="#0066CC")
         self.asm_text.tag_configure("number", foreground="#CC0000")
+        self.asm_text.tag_configure("comment", foreground="#008000")
         self.asm_text.bind("<<Modified>>", self._on_asm_modified)
         x_scroll = ttk.Scrollbar(self.asm_frame, orient="horizontal", command=self.asm_text.xview)
         y_scroll = ttk.Scrollbar(self.asm_frame, orient="vertical", command=self.asm_text.yview)
@@ -291,21 +291,28 @@ class SynapseXGUI(tk.Tk):
         text = self.asm_text.get("1.0", tk.END)
         self.asm_text.tag_remove("instr", "1.0", tk.END)
         self.asm_text.tag_remove("number", "1.0", tk.END)
+        self.asm_text.tag_remove("comment", "1.0", tk.END)
         for line_no, line in enumerate(text.splitlines(), start=1):
-            tokens = line.split()
+            code, sep, _comment = line.partition(";")
+            tokens = code.split()
             if tokens:
                 token = tokens[0]
-                col = line.find(token)
+                col = code.find(token)
                 if token.endswith(":") and len(tokens) > 1:
                     token = tokens[1]
-                    col = line.find(token)
+                    col = code.find(token)
                 start = f"{line_no}.{col}"
                 end = f"{start}+{len(token)}c"
                 self.asm_text.tag_add("instr", start, end)
-            for match in re.finditer(r"\b-?(0x[0-9a-fA-F]+|\d+)\b", line):
+            for match in re.finditer(r"\b-?(0x[0-9a-fA-F]+|\d+)\b", code):
                 num_start = f"{line_no}.{match.start()}"
                 num_end = f"{line_no}.{match.end()}"
                 self.asm_text.tag_add("number", num_start, num_end)
+            if sep:
+                col = len(code)
+                start = f"{line_no}.{col}"
+                end = f"{line_no}.{len(line)}"
+                self.asm_text.tag_add("comment", start, end)
 
     def run_selected(self) -> None:
         sel = self.asm_tree.selection()
@@ -333,17 +340,30 @@ class SynapseXGUI(tk.Tk):
         sub_nb.select(frame)
         self.results_nb.select(sub_nb)
 
-        # add generated figures as notebook tabs
+        # add generated figures as notebook tabs with scrollbars
         for fig in soc.neural_ip.last_figures:
             buf_img = io.BytesIO()
             fig.savefig(buf_img, format="png")
             buf_img.seek(0)
             image = Image.open(buf_img)
             photo = ImageTk.PhotoImage(image)
-            lbl = ttk.Label(self.results_nb, image=photo)
-            lbl.image = photo
+
+            frame = ttk.Frame(self.results_nb)
+            canvas = tk.Canvas(frame, width=min(800, image.width), height=min(600, image.height))
+            hbar = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=canvas.xview)
+            vbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
+            canvas.configure(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
+            canvas.create_image(0, 0, image=photo, anchor="nw")
+            canvas.configure(scrollregion=(0, 0, image.width, image.height))
+
+            canvas.grid(row=0, column=0, sticky="nsew")
+            vbar.grid(row=0, column=1, sticky="ns")
+            hbar.grid(row=1, column=0, sticky="ew")
+            frame.rowconfigure(0, weight=1)
+            frame.columnconfigure(0, weight=1)
+
             self._figure_images.append(photo)
-            self.results_nb.add(lbl, text=f"Fig {len(self.results_nb.tabs())}")
+            self.results_nb.add(frame, text=f"Fig {len(self.results_nb.tabs()) + 1}")
             plt.close(fig)
 
 
