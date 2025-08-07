@@ -260,7 +260,7 @@ class SynapseXGUI(tk.Tk):
             return
         asm_path = Path(sel[0])
         train_dir = self.data_entry.get() or None
-        soc = SoC(train_data_dir=train_dir, show_plots=False)
+        soc = SoC(train_data_dir=train_dir)
         asm_lines = load_asm_file(asm_path)
         soc.load_assembly(asm_lines)
         buf = io.StringIO()
