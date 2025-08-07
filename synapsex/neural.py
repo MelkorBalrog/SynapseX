@@ -107,11 +107,21 @@ class PyTorchANN:
         how to display or embed the returned figures."""
 
         # Split the data into a deterministic training/validation partition so
-        # early stopping decisions are based on unseen samples.
+        # early stopping decisions are based on unseen samples.  Datasets used
+        # in the GUI can be tiny, so guard against edge cases where the split
+        # would yield empty training or validation sets.
         n = len(X)
-        val_size = int(n * val_split)
-        train_X, val_X = X[:-val_size], X[-val_size:]
-        train_y, val_y = y[:-val_size], y[-val_size:]
+        if n == 0:
+            raise ValueError("Empty training set")
+        if n < 2:
+            train_X = val_X = X
+            train_y = val_y = y
+        else:
+            val_size = int(n * val_split)
+            if val_size <= 0 or val_size >= n:
+                val_size = max(1, n - 1)
+            train_X, val_X = X[:-val_size], X[-val_size:]
+            train_y, val_y = y[:-val_size], y[-val_size:]
 
         train_ds = TensorDataset(self._format_input(train_X), train_y)
         train_loader = DataLoader(
@@ -199,6 +209,8 @@ class PyTorchANN:
 
     def evaluate(self, X: torch.Tensor, y: torch.Tensor) -> Dict[str, float]:
         """Return accuracy, precision, recall and F1 for the given dataset."""
+        if len(X) == 0:
+            return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0}
 
         self.model.eval()
         with torch.no_grad():
