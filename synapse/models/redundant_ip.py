@@ -246,9 +246,16 @@ class RedundantNeuralIP:
                 majority = top
         self.last_result = majority
         self.vote_history.append(self.last_result)
-        print(f"ANN {ann_id} prediction: {ann_pred}")
+        names = self.class_names
+        ann_label = names[ann_pred] if names and 0 <= ann_pred < len(names) else ann_pred
+        print(f"ANN {ann_id} prediction: {ann_label}")
         if len(self.ann_map) == 3:
-            print(f"Majority vote: {self.last_result}")
+            majority_label = (
+                names[self.last_result]
+                if names and 0 <= self.last_result < len(names)
+                else self.last_result
+            )
+            print(f"Majority vote: {majority_label}")
 
     # ------------------------------------------------------------------
     # TUNE_GA helpers
