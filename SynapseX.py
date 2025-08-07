@@ -53,8 +53,10 @@ class SynapseXGUI(tk.Tk):
         self.current_asm_path: Path | None = None
         self._build_menu()
         self._build_ui()
-        # keep references to PhotoImage objects to avoid garbage collection
-        self._figure_images: list[ImageTk.PhotoImage] = []
+        # keep references to PhotoImage objects keyed by ANN notebook so they
+        # remain valid while displayed; this also lets us release previous
+        # images when retraining
+        self._figure_images: dict[str, list[ImageTk.PhotoImage]] = {}
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self)
@@ -260,13 +262,15 @@ class SynapseXGUI(tk.Tk):
             return
         asm_path = Path(sel[0])
         train_dir = self.data_entry.get() or None
-        soc = SoC(train_data_dir=train_dir, show_plots=False)
+        soc = SoC(train_data_dir=train_dir)
         asm_lines = load_asm_file(asm_path)
         soc.load_assembly(asm_lines)
         buf = io.StringIO()
         with redirect_stdout(buf):
             soc.run(max_steps=3000)
         out = buf.getvalue()
+        if soc.neural_ip.last_result is not None:
+            out += f"\nPredicted class: {soc.neural_ip.last_result}\n"
         net_name = asm_path.stem
         if net_name not in self.network_tabs:
             sub_nb = ttk.Notebook(self.results_nb)
@@ -280,31 +284,57 @@ class SynapseXGUI(tk.Tk):
         sub_nb.select(text)
         self.results_nb.select(sub_nb)
 
-        # add generated figures as notebook tabs with scrollbars
-        for fig in soc.neural_ip.last_figures:
-            buf_img = io.BytesIO()
-            fig.savefig(buf_img, format="png")
-            buf_img.seek(0)
-            image = Image.open(buf_img)
-            photo = ImageTk.PhotoImage(image)
+        # Add generated figures for each ANN as tabs within its own notebook
+        tab_titles = ["Metrics", "Weights", "Confusion"]
+        for ann_id, figs in soc.neural_ip.figures_by_ann.items():
+            key = f"ANN {ann_id}"
+            if key not in self.network_tabs:
+                ann_nb = ttk.Notebook(self.results_nb)
+                self.results_nb.add(ann_nb, text=key)
+                self.network_tabs[key] = ann_nb
+            ann_nb = self.network_tabs[key]
 
-            frame = ttk.Frame(self.results_nb)
-            canvas = tk.Canvas(frame, width=min(800, image.width), height=min(600, image.height))
-            hbar = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=canvas.xview)
-            vbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
-            canvas.configure(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
-            canvas.create_image(0, 0, image=photo, anchor="nw")
-            canvas.configure(scrollregion=(0, 0, image.width, image.height))
+            # Remove old tabs and image references for this ANN to free memory
+            for tab in ann_nb.tabs():
+                ann_nb.forget(tab)
+                ann_nb.nametowidget(tab).destroy()
+            self._figure_images.pop(key, None)
+            images: list[ImageTk.PhotoImage] = []
 
-            canvas.grid(row=0, column=0, sticky="nsew")
-            vbar.grid(row=0, column=1, sticky="ns")
-            hbar.grid(row=1, column=0, sticky="ew")
-            frame.rowconfigure(0, weight=1)
-            frame.columnconfigure(0, weight=1)
+            metrics = soc.neural_ip.metrics_by_ann.get(ann_id)
+            if metrics:
+                metric_txt = ScrolledText(ann_nb, wrap="word", font=("Segoe UI", 10))
+                for name, val in metrics.items():
+                    metric_txt.insert(tk.END, f"{name}: {val:.4f}\n")
+                metric_txt.config(state="disabled")
+                ann_nb.add(metric_txt, text="Summary")
+            for fig, title in zip(figs, tab_titles):
+                buf_img = io.BytesIO()
+                fig.savefig(buf_img, format="png")
+                buf_img.seek(0)
+                image = Image.open(buf_img)
+                photo = ImageTk.PhotoImage(image)
 
-            self._figure_images.append(photo)
-            self.results_nb.add(frame, text=f"Fig {len(self.results_nb.tabs()) + 1}")
-            plt.close(fig)
+                frame = ttk.Frame(ann_nb)
+                canvas = tk.Canvas(frame, width=min(800, image.width), height=min(600, image.height))
+                hbar = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=canvas.xview)
+                vbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
+                canvas.configure(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
+                canvas.create_image(0, 0, image=photo, anchor="nw")
+                canvas.configure(scrollregion=(0, 0, image.width, image.height))
+
+                canvas.grid(row=0, column=0, sticky="nsew")
+                vbar.grid(row=0, column=1, sticky="ns")
+                hbar.grid(row=1, column=0, sticky="ew")
+                frame.rowconfigure(0, weight=1)
+                frame.columnconfigure(0, weight=1)
+
+                images.append(photo)
+                ann_nb.add(frame, text=title)
+                plt.close(fig)
+            self._figure_images[key] = images
+        soc.neural_ip.figures_by_ann.clear()
+        soc.neural_ip.metrics_by_ann.clear()
 
 
 def main() -> None:
@@ -332,11 +362,22 @@ def main() -> None:
         if len(sys.argv) < 3:
             print("Usage: python SynapseX.py classify path/to/image.png")
             return
+        image_path = Path(sys.argv[2])
+        if not image_path.is_file():
+            print(f"Image '{image_path}' not found.")
+            return
         soc = SoC()
+        processed_dir = Path.cwd() / "processed"
+        processed = load_process_shape_image(str(image_path), out_dir=processed_dir, angles=[0])[0]
+        base_addr = 0x5000
+        for i, val in enumerate(processed):
+            word = np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
+            soc.memory.write(base_addr + i, int(word))
         asm_lines = load_asm_file(Path("asm") / "classification.asm")
         soc.load_assembly(asm_lines)
         soc.run(max_steps=3000)
-        print("\nClassification Phase Completed!")
+        result = soc.cpu.get_reg("$t9")
+        print(f"\nClassification Phase Completed!\nPredicted class: {result}")
     else:
         print("Unknown mode. Use 'train', 'classify' or 'gui'.")
 
