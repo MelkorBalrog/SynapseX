@@ -280,39 +280,31 @@ class SynapseXGUI(tk.Tk):
         sub_nb.select(text)
         self.results_nb.select(sub_nb)
 
-        # Add generated figures for each ANN as tabs within its own notebook
-        tab_titles = ["Metrics", "Weights", "Confusion"]
-        for ann_id, figs in soc.neural_ip.figures_by_ann.items():
-            key = f"ANN {ann_id}"
-            if key not in self.network_tabs:
-                ann_nb = ttk.Notebook(self.results_nb)
-                self.results_nb.add(ann_nb, text=key)
-                self.network_tabs[key] = ann_nb
-            ann_nb = self.network_tabs[key]
-            for fig, title in zip(figs, tab_titles):
-                buf_img = io.BytesIO()
-                fig.savefig(buf_img, format="png")
-                buf_img.seek(0)
-                image = Image.open(buf_img)
-                photo = ImageTk.PhotoImage(image)
+        # add generated figures as notebook tabs with scrollbars
+        for fig in soc.neural_ip.last_figures:
+            buf_img = io.BytesIO()
+            fig.savefig(buf_img, format="png")
+            buf_img.seek(0)
+            image = Image.open(buf_img)
+            photo = ImageTk.PhotoImage(image)
 
-                frame = ttk.Frame(ann_nb)
-                canvas = tk.Canvas(frame, width=min(800, image.width), height=min(600, image.height))
-                hbar = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=canvas.xview)
-                vbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
-                canvas.configure(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
-                canvas.create_image(0, 0, image=photo, anchor="nw")
-                canvas.configure(scrollregion=(0, 0, image.width, image.height))
+            frame = ttk.Frame(self.results_nb)
+            canvas = tk.Canvas(frame, width=min(800, image.width), height=min(600, image.height))
+            hbar = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=canvas.xview)
+            vbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
+            canvas.configure(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
+            canvas.create_image(0, 0, image=photo, anchor="nw")
+            canvas.configure(scrollregion=(0, 0, image.width, image.height))
 
-                canvas.grid(row=0, column=0, sticky="nsew")
-                vbar.grid(row=0, column=1, sticky="ns")
-                hbar.grid(row=1, column=0, sticky="ew")
-                frame.rowconfigure(0, weight=1)
-                frame.columnconfigure(0, weight=1)
+            canvas.grid(row=0, column=0, sticky="nsew")
+            vbar.grid(row=0, column=1, sticky="ns")
+            hbar.grid(row=1, column=0, sticky="ew")
+            frame.rowconfigure(0, weight=1)
+            frame.columnconfigure(0, weight=1)
 
-                self._figure_images.append(photo)
-                ann_nb.add(frame, text=title)
-                plt.close(fig)
+            self._figure_images.append(photo)
+            self.results_nb.add(frame, text=f"Fig {len(self.results_nb.tabs()) + 1}")
+            plt.close(fig)
 
 
 def main() -> None:
