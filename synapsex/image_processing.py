@@ -149,7 +149,7 @@ def preprocess_vehicle_image(
 
 def load_vehicle_dataset(
     root_dir: str, target_size: int = 28, rotate: bool = True
-) -> tuple[torch.Tensor, torch.Tensor, List[str]]:
+) -> tuple[torch.Tensor, torch.Tensor, list[str]]:
     """Load vehicle images from class-named subdirectories.
 
     Parameters
@@ -166,8 +166,9 @@ def load_vehicle_dataset(
     Returns
     -------
     X, y, class_names:
-        ``X`` is a tensor of flattened images and ``y`` contains integer class
-        labels. ``class_names`` lists the class directory names in index order.
+        ``X`` is a tensor of flattened images, ``y`` contains integer class
+        labels and ``class_names`` lists the class directory names in index
+        order.
     """
 
     root = Path(root_dir)
