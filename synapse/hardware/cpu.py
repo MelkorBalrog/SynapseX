@@ -69,8 +69,9 @@ class CPU:
             self.running = False
             if self.neural_ip.last_result is not None:
                 result = self.get_reg("$t9")
-                label_map = {0: "A", 1: "B", 2: "Unknown"}
-                print(f"Final classification: {label_map.get(result, result)}")
+                class_names = getattr(self.neural_ip, "class_names", [])
+                label = class_names[result] if 0 <= result < len(class_names) else result
+                print(f"Final classification: {label}")
         elif instr == "ADDI":
             rd = parts[1].rstrip(",")
             rs = parts[2].rstrip(",")
@@ -99,6 +100,6 @@ class CPU:
         elif instr == "OP_NEUR":
             subcmd = " ".join(parts[1:])
             self.neural_ip.run_instruction(subcmd, memory=self.memory)
-            if subcmd.upper().startswith("INFER_ANN") and self.neural_ip.last_result is not None:
+            if any(subcmd.upper().startswith(cmd) for cmd in ("INFER_ANN", "GET_ARGMAX", "GET_NUM_CLASSES")) and self.neural_ip.last_result is not None:
                 self.set_reg("$t9", int(self.neural_ip.last_result))
 

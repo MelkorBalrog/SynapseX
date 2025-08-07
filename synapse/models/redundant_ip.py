@@ -55,6 +55,12 @@ class RedundantNeuralIP:
         # Metrics and figures generated during training keyed by ANN ID
         self.metrics_by_ann: Dict[int, Dict[str, float]] = {}
         self.figures_by_ann: Dict[int, List] = {}
+        # Class names inferred from the training directory for label mapping
+        self.class_names: List[str] = []
+        if train_data_dir:
+            root = Path(train_data_dir)
+            if root.is_dir():
+                self.class_names = sorted([d.name for d in root.iterdir() if d.is_dir()])
 
     # ------------------------------------------------------------------
     # Assembly interface
@@ -84,6 +90,15 @@ class RedundantNeuralIP:
                     ann.load(f"{prefix}_{ann_id}.pt")
                 except FileNotFoundError:
                     pass
+        elif op == "GET_ARGMAX":
+            # Argmax already computed during INFER_ANN; expose via last_result
+            pass
+        elif op == "GET_NUM_CLASSES":
+            if not self.class_names and self.train_data_dir:
+                root = Path(self.train_data_dir)
+                if root.is_dir():
+                    self.class_names = sorted([d.name for d in root.iterdir() if d.is_dir()])
+            self.last_result = len(self.class_names) if self.class_names else hp.num_classes
         elif op == "SAVE_PROJECT":
             json_path = tokens[1] if len(tokens) > 1 else "project.json"
             prefix = tokens[2] if len(tokens) > 2 else "weights"
@@ -231,6 +246,10 @@ class RedundantNeuralIP:
     # Internal helpers
     # ------------------------------------------------------------------
     def _load_dataset(self):
+        if not self.class_names and self.train_data_dir:
+            root = Path(self.train_data_dir)
+            if root.is_dir():
+                self.class_names = sorted([d.name for d in root.iterdir() if d.is_dir()])
         if self._cached_dataset is None:
             if not self.train_data_dir:
                 print("No training data directory specified; aborting training.")
