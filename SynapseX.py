@@ -265,9 +265,7 @@ class SynapseXGUI(tk.Tk):
         )
         if not path:
             return
-        processed_dir = Path.cwd() / "processed"
-        processed_imgs = load_process_shape_image(path, out_dir=processed_dir, save=True)
-        processed = processed_imgs[0]
+        processed = load_process_shape_image(path, angles=[0])[0]
         soc = SoC()
         base_addr = 0x5000
         for i, val in enumerate(processed):
@@ -471,8 +469,7 @@ def main() -> None:
             print(f"Image '{image_path}' not found.")
             return
         soc = SoC()
-        processed_dir = Path.cwd() / "processed"
-        processed = load_process_shape_image(str(image_path), out_dir=processed_dir, angles=[0])[0]
+        processed = load_process_shape_image(str(image_path), angles=[0])[0]
         base_addr = 0x5000
         for i, val in enumerate(processed):
             word = np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
