@@ -159,8 +159,8 @@ def load_vehicle_dataset(
     target_size:
         Square size to which all images are resized.
     rotate:
-        If ``True`` each image is augmented with rotations every 10°
-        covering the full 360° range (36 orientations including the
+        If ``True`` each image is augmented with rotations every 5°
+        covering the full 360° range (72 orientations including the
         original).
 
     Returns
@@ -186,7 +186,7 @@ def load_vehicle_dataset(
             pil_img = Image.open(img_path).convert("L")
             if rotate:
                 bg_color = pil_img.getpixel((0, 0))
-                for angle in range(0, 360, 10):
+                for angle in range(0, 360, 5):
                     rotated = pil_img.rotate(
                         angle, resample=resample_bicubic, expand=True, fillcolor=bg_color
                     )
