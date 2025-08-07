@@ -95,12 +95,15 @@ class VirtualANN(nn.Module):
             f1_hist,
         )
         if fig is not None:
+            fig.show()
             figs.append(fig)
         fig = self.visualize_weights()
         if fig is not None:
+            fig.show()
             figs.append(fig)
         fig = self.visualize_confusion_matrix(y, preds_full)
         if fig is not None:
+            fig.show()
             figs.append(fig)
 
         return figs
@@ -109,7 +112,9 @@ class VirtualANN(nn.Module):
         self.eval()
         with torch.no_grad():
             logits = self(torch.from_numpy(X).float())
-            return torch.argmax(logits, dim=1).cpu().numpy()
+            preds = torch.argmax(logits, dim=1).cpu().numpy()
+            print("Predicted classes:", preds)
+            return preds
 
     def predict_with_uncertainty(self, X: np.ndarray, mc_passes: int = 10):
         self.train()  # enable dropout at inference
@@ -119,6 +124,8 @@ class VirtualANN(nn.Module):
             outputs.append(self(inp).detach().cpu().numpy())
         mean = np.mean(outputs, axis=0)
         var = np.var(outputs, axis=0)
+        preds = np.argmax(mean, axis=1)
+        print("Predicted classes:", preds)
         return mean, var
 
     # ------------------------------------------------------------------
