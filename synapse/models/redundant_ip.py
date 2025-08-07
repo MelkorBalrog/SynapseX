@@ -13,6 +13,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Dict, List
 
+import matplotlib.pyplot as plt
+
 import numpy as np
 import torch
 
@@ -31,8 +33,8 @@ class RedundantNeuralIP:
         self.train_data_dir = train_data_dir
         self._cached_dataset: tuple[np.ndarray, np.ndarray] | None = None
         self.show_plots = show_plots
-        # figures generated during the last training run (unused for PyTorchANN)
-        self.last_figures: List = []
+        # Figures generated during training keyed by ANN ID
+        self.figures_by_ann: Dict[int, List] = {}
 
     # ------------------------------------------------------------------
     # Assembly interface
@@ -101,7 +103,9 @@ class RedundantNeuralIP:
         metrics, figs = ann.train(
             torch.from_numpy(X), torch.from_numpy(y), show_plots=self.show_plots
         )
-        self.last_figures = figs
+        for old in self.figures_by_ann.get(ann_id, []):
+            plt.close(old)
+        self.figures_by_ann[ann_id] = figs
         print(f"ANN {ann_id} metrics: {metrics}")
 
     # ------------------------------------------------------------------
