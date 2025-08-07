@@ -52,7 +52,8 @@ class RedundantNeuralIP:
         self._argmax: Dict[int, int] = {}
         self.vote_history: List[int] = []
         self.train_data_dir = train_data_dir
-        self._cached_dataset: tuple[torch.Tensor, torch.Tensor] | None = None
+        self.class_names: list[str] | None = None
+        self._cached_dataset: tuple[torch.Tensor, torch.Tensor, list[str]] | None = None
         # Metrics and figures generated during training keyed by ANN ID
         self.metrics_by_ann: Dict[int, Dict[str, float]] = {}
         self.figures_by_ann: Dict[int, List] = {}
@@ -134,7 +135,7 @@ class RedundantNeuralIP:
             }
 
         with open(json_path, "w", encoding="utf-8") as f:
-            json.dump({"anns": project}, f, indent=2)
+            json.dump({"anns": project, "class_names": self.class_names or []}, f, indent=2)
 
     # ------------------------------------------------------------------
     # CONFIG_ANN helpers
@@ -169,7 +170,7 @@ class RedundantNeuralIP:
         dataset = self._load_dataset()
         if dataset is None:
             return
-        X, y = dataset
+        X, y, _ = dataset
 
         # Update only the epoch count; GA-tuned learning rate and batch size are preserved
         ann.hp = replace(ann.hp, epochs=epochs)
@@ -220,7 +221,7 @@ class RedundantNeuralIP:
         dataset = self._load_dataset()
         if dataset is None:
             return
-        X, y = dataset
+        X, y, _ = dataset
 
         best_hp, best_ann = genetic_search(
             X,
@@ -240,14 +241,20 @@ class RedundantNeuralIP:
                 return None
             data_path = Path(self.train_data_dir) / "data.npy"
             labels_path = Path(self.train_data_dir) / "labels.npy"
-            if not data_path.exists() or not labels_path.exists():
-                X, y = load_vehicle_dataset(self.train_data_dir, hp.image_size)
+            classes_path = Path(self.train_data_dir) / "classes.json"
+            if not data_path.exists() or not labels_path.exists() or not classes_path.exists():
+                X, y, class_names = load_vehicle_dataset(self.train_data_dir, hp.image_size)
                 np.save(data_path, X.numpy())
                 np.save(labels_path, y.numpy())
+                with open(classes_path, "w", encoding="utf-8") as fh:
+                    json.dump(class_names, fh)
             else:
                 X = torch.from_numpy(np.load(data_path).astype(np.float32))
                 y = torch.from_numpy(np.load(labels_path).astype(np.int64))
-            hp.num_classes = int(torch.unique(y).numel())
-            self._cached_dataset = (X, y)
+                with open(classes_path, "r", encoding="utf-8") as fh:
+                    class_names = json.load(fh)
+            hp.num_classes = len(class_names)
+            self.class_names = class_names
+            self._cached_dataset = (X, y, class_names)
         return self._cached_dataset
 

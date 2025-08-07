@@ -35,13 +35,15 @@ def _prepare_dataset(tmp_path):
 
 def test_load_vehicle_dataset(tmp_path):
     _prepare_dataset(tmp_path)
-    X, y = load_vehicle_dataset(tmp_path, target_size=8)
+    X, y, names = load_vehicle_dataset(tmp_path, target_size=8)
     assert X.shape == (144, 64)
     assert torch.bincount(y).tolist() == [72, 72]
+    assert names == ["car", "truck"]
 
 
 def test_load_vehicle_dataset_no_rotate(tmp_path):
     _prepare_dataset(tmp_path)
-    X, y = load_vehicle_dataset(tmp_path, target_size=8, rotate=False)
+    X, y, names = load_vehicle_dataset(tmp_path, target_size=8, rotate=False)
     assert X.shape == (2, 64)
     assert y.tolist() == [0, 1]
+    assert names == ["car", "truck"]

@@ -15,6 +15,7 @@ def test_save_project(tmp_path):
     json_path = tmp_path / "project.json"
     ip.save_project(str(json_path), "test_weights")
     data = json.loads(json_path.read_text())
+    assert data["class_names"] == []
     assert "0" in data["anns"]
     ann_data = data["anns"]["0"]
     weight_file = tmp_path / ann_data["weights"]
