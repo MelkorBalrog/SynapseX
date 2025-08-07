@@ -30,7 +30,12 @@ class TransformerClassifier(nn.Module):
         # Positional embeddings for each patch
         self.pos_embed = nn.Parameter(torch.zeros(n_patches, embed_dim))
         nn.init.normal_(self.pos_embed, std=0.02)
-        encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=self.nhead, dropout=dropout)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=embed_dim,
+            nhead=self.nhead,
+            dropout=dropout,
+            batch_first=True,
+        )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.dropout = nn.Dropout(dropout)
         self.head = nn.Linear(n_patches * embed_dim, num_classes)
