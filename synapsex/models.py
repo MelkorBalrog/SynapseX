@@ -30,8 +30,6 @@ class TransformerClassifier(nn.Module):
         # Positional embeddings for each patch
         self.pos_embed = nn.Parameter(torch.zeros(n_patches, embed_dim))
         nn.init.normal_(self.pos_embed, std=0.02)
-        # Use batch_first=True so inputs are (batch, sequence, feature).
-        # This avoids nested tensor warnings and enables better performance.
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=embed_dim,
             nhead=self.nhead,
