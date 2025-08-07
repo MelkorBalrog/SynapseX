@@ -81,6 +81,8 @@ class RedundantNeuralIP:
             if len(tokens) > 1:
                 ann_id = int(tokens[1])
                 result = self._argmax.get(ann_id, 0)
+        elif op == "MAJORITY_VOTE":
+            result = self._majority_vote()
         elif op == "SAVE_ALL":
             prefix = tokens[1] if len(tokens) > 1 else "weights"
             for ann_id, ann in self.ann_map.items():
@@ -206,6 +208,14 @@ class RedundantNeuralIP:
         self.vote_history.append(result)
         print(f"ANN {ann_id} prediction: {result}")
         return result
+
+    def _majority_vote(self) -> int:
+        """Return the class ID with the highest vote from cached argmaxes."""
+        preds = list(self._argmax.values())
+        if not preds:
+            return 0
+        counts = np.bincount(preds, minlength=hp.num_classes)
+        return int(counts.argmax())
 
     # ------------------------------------------------------------------
     # TUNE_GA helpers

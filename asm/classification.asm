@@ -38,53 +38,10 @@ OP_NEUR INFER_ANN 2 true 10
 OP_NEUR GET_ARGMAX 2
 SW $t9, ann_preds+8            ; store ANN2 prediction
 
-; (D) Majority voting for all classes using loop based on hp.num_classes
-ADDI $t0, $zero, 0             ; index for vote initialisation
-init_votes:
-BEQ $t0, $s0, votes_inited
-SLL $t1, $t0, 2                ; offset = i * 4
-SW $zero, votes($t1)
-ADDI $t0, $t0, 1
-J init_votes
-votes_inited:
-
-ADDI $t0, $zero, 0             ; iterate over ANN predictions
-ADDI $t2, $zero, 3             ; number of ANNs (fixed)
-count_loop:
-BEQ $t0, $t2, count_done
-SLL $t1, $t0, 2
-LW $t3, ann_preds($t1)
-SLL $t4, $t3, 2                ; vote index
-LW $t5, votes($t4)
-ADDI $t5, $t5, 1
-SW $t5, votes($t4)
-ADDI $t0, $t0, 1
-J count_loop
-count_done:
-
-; (E) Select class with highest vote
-ADDI $t0, $zero, 0             ; class index
-ADDI $t6, $zero, -1            ; max vote count
-ADDI $t9, $zero, 0             ; predicted class
-max_loop:
-BEQ $t0, $s0, finalize_output
-SLL $t1, $t0, 2
-LW $t3, votes($t1)
-BGT $t3, $t6, update_max
-ADDI $t0, $t0, 1
-J max_loop
-update_max:
-ADD $t6, $t3, $zero
-ADD $t9, $t0, $zero
-ADDI $t0, $t0, 1
-J max_loop
-
-finalize_output:
-; Final result is in $t9. Use green color when class 0 is predicted.
+; (D) Majority voting computed by Neural IP
+OP_NEUR MAJORITY_VOTE
 HALT
 
 .data
-votes:
-    .space 64                   ; vote counts for each class (>= hp.num_classes)
 ann_preds:
     .space 12                   ; argmax results from the three ANNs
