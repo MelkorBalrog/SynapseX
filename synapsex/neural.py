@@ -15,19 +15,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import os
-import sys
 from dataclasses import replace
 from typing import Dict, Tuple, List, Optional
 
 import matplotlib
-
-# Only fall back to a non-interactive backend when running headless on
-# platforms that honour the ``DISPLAY`` variable (i.e. Unix).  Windows users
-# typically have a display even when ``DISPLAY`` is unset, so we avoid forcing
-# the ``Agg`` backend there.
-if os.environ.get("DISPLAY", "") == "" and sys.platform != "win32":
-    matplotlib.use("Agg")
+matplotlib.use("Agg")
 matplotlib.rcParams["figure.max_open_warning"] = 0
 import matplotlib.pyplot as plt
 import numpy as np
