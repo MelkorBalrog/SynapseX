@@ -41,6 +41,7 @@ from synapsex.config import HyperParameters, hp
 from synapsex.genetic import genetic_search
 from synapsex.neural import PyTorchANN
 from synapsex.image_processing import load_vehicle_dataset
+from synapse.constants import IMAGE_BUFFER_BASE_ADDR_BYTES
 
 
 class RedundantNeuralIP:
@@ -52,7 +53,8 @@ class RedundantNeuralIP:
         self._argmax: Dict[int, int] = {}
         self.vote_history: List[int] = []
         self.train_data_dir = train_data_dir
-        self._cached_dataset: tuple[torch.Tensor, torch.Tensor] | None = None
+        self._cached_dataset: tuple[torch.Tensor, torch.Tensor, List[str]] | None = None
+        self.class_names: List[str] = []
         # Metrics and figures generated during training keyed by ANN ID
         self.metrics_by_ann: Dict[int, Dict[str, float]] = {}
         self.figures_by_ann: Dict[int, List] = {}
@@ -76,6 +78,10 @@ class RedundantNeuralIP:
         elif op == "INFER_ANN":
             result = self._infer_ann(tokens[1:], memory)
         elif op == "GET_NUM_CLASSES":
+            if hp.num_classes == 0:
+                raise ValueError(
+                    "hp.num_classes is 0; load training metadata or configure an ANN first"
+                )
             result = hp.num_classes
         elif op == "GET_ARGMAX":
             if len(tokens) > 1:
@@ -85,12 +91,23 @@ class RedundantNeuralIP:
             prefix = tokens[1] if len(tokens) > 1 else "weights"
             for ann_id, ann in self.ann_map.items():
                 ann.save(f"{prefix}_{ann_id}.pt")
+            meta_path = Path(f"{prefix}_meta.json")
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump({"num_classes": hp.num_classes}, f)
         elif op == "LOAD_ALL":
             prefix = tokens[1] if len(tokens) > 1 else "weights"
             for ann_id, ann in self.ann_map.items():
                 try:
                     ann.load(f"{prefix}_{ann_id}.pt")
                 except FileNotFoundError:
+                    pass
+            meta_path = Path(f"{prefix}_meta.json")
+            if meta_path.exists():
+                try:
+                    with open(meta_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    hp.num_classes = int(data.get("num_classes", hp.num_classes))
+                except (OSError, ValueError, json.JSONDecodeError):
                     pass
         elif op == "SAVE_PROJECT":
             json_path = tokens[1] if len(tokens) > 1 else "project.json"
@@ -134,7 +151,7 @@ class RedundantNeuralIP:
             }
 
         with open(json_path, "w", encoding="utf-8") as f:
-            json.dump({"anns": project}, f, indent=2)
+            json.dump({"anns": project, "num_classes": hp.num_classes}, f, indent=2)
 
     # ------------------------------------------------------------------
     # CONFIG_ANN helpers
@@ -146,6 +163,16 @@ class RedundantNeuralIP:
         cmd = tokens[1]
         # Legacy layer instructions are ignored; only FINALIZE is required to create the ANN
         if cmd == "FINALIZE":
+            meta_prefix = tokens[3] if len(tokens) >= 4 else None
+            if meta_prefix:
+                meta_path = Path(f"{meta_prefix}_meta.json")
+                if meta_path.exists():
+                    try:
+                        with open(meta_path, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                        hp.num_classes = int(data.get("num_classes", hp.num_classes))
+                    except (OSError, ValueError, json.JSONDecodeError):
+                        pass
             if self.train_data_dir:
                 self._load_dataset()
             dropout = float(tokens[2]) if len(tokens) >= 3 else hp.dropout
@@ -169,7 +196,7 @@ class RedundantNeuralIP:
         dataset = self._load_dataset()
         if dataset is None:
             return
-        X, y = dataset
+        X, y, _ = dataset
 
         # Update only the epoch count; GA-tuned learning rate and batch size are preserved
         ann.hp = replace(ann.hp, epochs=epochs)
@@ -190,7 +217,8 @@ class RedundantNeuralIP:
         ann = self.ann_map.get(ann_id)
         if ann is None:
             return
-        addr = 0x5000
+        addr_bytes = IMAGE_BUFFER_BASE_ADDR_BYTES
+        addr = addr_bytes // 4
         in_dim = ann.hp.image_size * ann.hp.image_size
         data: List[float] = []
         for i in range(in_dim):
@@ -220,7 +248,7 @@ class RedundantNeuralIP:
         dataset = self._load_dataset()
         if dataset is None:
             return
-        X, y = dataset
+        X, y, _ = dataset
 
         best_hp, best_ann = genetic_search(
             X,
@@ -241,13 +269,15 @@ class RedundantNeuralIP:
             data_path = Path(self.train_data_dir) / "data.npy"
             labels_path = Path(self.train_data_dir) / "labels.npy"
             if not data_path.exists() or not labels_path.exists():
-                X, y = load_vehicle_dataset(self.train_data_dir, hp.image_size)
+                X, y, class_names = load_vehicle_dataset(self.train_data_dir, hp.image_size)
                 np.save(data_path, X.numpy())
                 np.save(labels_path, y.numpy())
             else:
                 X = torch.from_numpy(np.load(data_path).astype(np.float32))
                 y = torch.from_numpy(np.load(labels_path).astype(np.int64))
+                class_names = self.class_names or []
             hp.num_classes = int(torch.unique(y).numel())
-            self._cached_dataset = (X, y)
+            self.class_names = class_names
+            self._cached_dataset = (X, y, class_names)
         return self._cached_dataset
 

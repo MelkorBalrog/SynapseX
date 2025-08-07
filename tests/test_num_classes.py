@@ -21,6 +21,7 @@ import os
 import sys
 
 import numpy as np
+import pytest
 import torch
 from PIL import Image
 
@@ -45,10 +46,21 @@ def test_num_classes_updates_and_predictions_in_range(tmp_path):
         ip.run_instruction("CONFIG_ANN 0 FINALIZE")
         ip.run_instruction("TRAIN_ANN 0 1")
         assert hp.num_classes == 2
-        X, _ = ip._load_dataset()
+        X, _, _ = ip._load_dataset()
         probs = ip.ann_map[0].predict(X)
         assert probs.shape[1] == 2
         assert int(probs.argmax(dim=1).max().item()) <= 1
     finally:
         for k, v in orig.items():
             setattr(hp, k, v)
+
+
+def test_get_num_classes_raises_when_zero():
+    orig = hp.num_classes
+    try:
+        hp.num_classes = 0
+        ip = RedundantNeuralIP()
+        with pytest.raises(ValueError):
+            ip.run_instruction("GET_NUM_CLASSES")
+    finally:
+        hp.num_classes = orig

@@ -16,9 +16,9 @@
 ; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ; (A) Initialize the 3 Principal ANNs (architecture loaded from weights)
-OP_NEUR CONFIG_ANN 0 FINALIZE 0.2
-OP_NEUR CONFIG_ANN 1 FINALIZE 0.2
-OP_NEUR CONFIG_ANN 2 FINALIZE 0.2
+OP_NEUR CONFIG_ANN 0 FINALIZE 0.2 trained_weights
+OP_NEUR CONFIG_ANN 1 FINALIZE 0.2 trained_weights
+OP_NEUR CONFIG_ANN 2 FINALIZE 0.2 trained_weights
 
 ; (A1) Load class count from configuration so assembly and Python agree
 OP_NEUR GET_NUM_CLASSES
