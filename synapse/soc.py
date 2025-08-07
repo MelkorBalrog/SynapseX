@@ -32,6 +32,8 @@ class SoC:
         self.video_ip = VideoProcIP()
         self.neural_ip = RedundantNeuralIP(train_data_dir=train_data_dir)
         self.cpu = CPU("CPU1", self.video_ip, self.neural_ip, self.memory, self.mmu)
+        # Ensure result register starts clean to avoid stale predictions
+        self.cpu.set_reg("$t9", 0)
         self.asm_program = []
         self.label_map = {}
         self.data_map = {}

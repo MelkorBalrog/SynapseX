@@ -26,4 +26,4 @@ def test_vote_history_records_predictions():
     memory = DummyMemory(data)
     ip.run_instruction("INFER_ANN 0", memory=memory)
     assert ip.vote_history == [ip._argmax[0]]
-    assert ip.last_result is None
+    assert ip.last_result == ip._argmax[0]

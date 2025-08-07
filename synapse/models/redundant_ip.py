@@ -96,7 +96,10 @@ class RedundantNeuralIP:
             json_path = tokens[1] if len(tokens) > 1 else "project.json"
             prefix = tokens[2] if len(tokens) > 2 else "weights"
             self.save_project(json_path, prefix)
-        self.last_result = None
+        if result is not None:
+            self.last_result = result
+        else:
+            self.last_result = None
         return result
 
     # ------------------------------------------------------------------
