@@ -57,6 +57,8 @@ class RedundantNeuralIP:
         self.figures_by_ann: Dict[int, List] = {}
         # History of predictions for majority voting or debugging
         self.vote_history: List[int] = []
+        # Mapping from class index to folder name
+        self.class_names: List[str] = []
 
     # ------------------------------------------------------------------
     # Assembly interface
@@ -223,13 +225,30 @@ class RedundantNeuralIP:
             word = memory.read(addr + i)
             data.append(np.frombuffer(np.uint32(word).tobytes(), dtype=np.float32)[0])
         X = np.array(data, dtype=np.float32).reshape(1, -1)
+        X_tensor = torch.from_numpy(X)
+
+        # Per-ANN prediction
         probs = ann.predict(
-            torch.from_numpy(X),
+            X_tensor,
             mc_dropout=len(tokens) > 1 and tokens[1].lower() == "true",
         )
-        self.last_result = int(probs.argmax(dim=1)[0])
+        ann_pred = int(probs.argmax(dim=1)[0])
+
+        # Majority vote across all ANNs using a 2-out-of-3 rule
+        votes: List[int] = []
+        for other in self.ann_map.values():
+            p = other.predict(X_tensor)
+            votes.append(int(p.argmax(dim=1)[0]))
+        majority = ann_pred
+        if len(self.ann_map) == 3:
+            top, count = Counter(votes).most_common(1)[0]
+            if count >= 2:
+                majority = top
+        self.last_result = majority
         self.vote_history.append(self.last_result)
-        print(f"ANN {ann_id} prediction: {self.last_result}")
+        print(f"ANN {ann_id} prediction: {ann_pred}")
+        if len(self.ann_map) == 3:
+            print(f"Majority vote: {self.last_result}")
 
     # ------------------------------------------------------------------
     # TUNE_GA helpers
@@ -259,14 +278,19 @@ class RedundantNeuralIP:
     # ------------------------------------------------------------------
     def predict_majority(self, X: np.ndarray):
         preds = {}
+        votes: List[int] = []
+        tensor = torch.from_numpy(X)
         for ann_id, ann in self.ann_map.items():
-            probs = ann.predict(torch.from_numpy(X))
-            preds[ann_id] = probs.argmax(dim=1).cpu().numpy()
+            probs = ann.predict(tensor)
+            pred = int(probs.argmax(dim=1)[0])
+            preds[ann_id] = np.array([pred])
+            votes.append(pred)
 
-        # ``Counter`` struggles with NumPy scalar types, so convert each vote to
-        # a native ``int`` before tallying the results.
-        votes = [int(preds[ann_id][0]) for ann_id in self.ann_map]
-        majority = int(Counter(votes).most_common(1)[0][0]) if votes else None
+        majority = None
+        if len(votes) == 3:
+            top, count = Counter(votes).most_common(1)[0]
+            if count >= 2:
+                majority = top
         return majority, preds
 
     # ------------------------------------------------------------------
@@ -288,7 +312,7 @@ class RedundantNeuralIP:
                 # If the cached dataset size is not a multiple of 72 it was
                 # likely generated without rotation, so regenerate to ensure
                 # the confusion matrix accounts for all augmented images.
-                class_dirs = [d for d in Path(self.train_data_dir).iterdir() if d.is_dir()]
+                class_dirs = sorted([d for d in Path(self.train_data_dir).iterdir() if d.is_dir()])
                 expected_labels = list(range(len(class_dirs)))
                 unique_labels = sorted(torch.unique(y).tolist())
                 if X.shape[0] % 72 != 0 or unique_labels != expected_labels:
@@ -298,7 +322,8 @@ class RedundantNeuralIP:
                 X, y = load_vehicle_dataset(self.train_data_dir, hp.image_size)
                 np.save(data_path, X.numpy())
                 np.save(labels_path, y.numpy())
-            num_classes = len(torch.unique(y))
+            self.class_names = sorted(d.name for d in Path(self.train_data_dir).iterdir() if d.is_dir())
+            num_classes = len(self.class_names)
             hp.num_classes = num_classes
             for ann_id, ann in list(self.ann_map.items()):
                 if ann.hp.num_classes != num_classes:
@@ -308,7 +333,8 @@ class RedundantNeuralIP:
             self._cached_dataset = (X, y)
         else:
             X, y = self._cached_dataset
-            num_classes = len(torch.unique(y))
+            self.class_names = sorted(d.name for d in Path(self.train_data_dir).iterdir() if d.is_dir())
+            num_classes = len(self.class_names)
             if hp.num_classes != num_classes:
                 hp.num_classes = num_classes
                 for ann_id, ann in list(self.ann_map.items()):
