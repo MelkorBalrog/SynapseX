@@ -15,8 +15,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import json
 from pathlib import Path
-from typing import Iterable, List
+from typing import Iterable, List, Tuple
 
 import numpy as np
 import torch
@@ -211,6 +212,88 @@ def load_process_shape_image(
         processed_images.append(norm_img.flatten())
     return processed_images
 
+
+def load_annotated_dataset(root_dir: str) -> List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+    """Load a dataset with COCO or YOLO-style annotations.
+
+    Parameters
+    ----------
+    root_dir:
+        Path to a directory containing the dataset.  For COCO-style
+        annotations the directory must include an ``annotations.json`` file.
+        For YOLO-style datasets a ``images/`` directory with the images and a
+        corresponding ``labels/`` directory with text files are expected.
+
+    Returns
+    -------
+    list of tuples
+        Each element contains ``(image_tensor, boxes, labels)`` where
+        ``image_tensor`` is a ``(C, H, W)`` float tensor in ``[0, 1]``.
+        ``boxes`` is an ``(N, 4)`` tensor of ``[x1, y1, x2, y2]`` in absolute
+        pixel coordinates and ``labels`` is a ``(N,)`` tensor of class indices.
+    """
+
+    root = Path(root_dir)
+    samples: List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = []
+
+    anno_file = root / "annotations.json"
+    if anno_file.exists():
+        with open(anno_file, "r", encoding="utf-8") as fh:
+            coco = json.load(fh)
+        img_index = {img["id"]: img for img in coco.get("images", [])}
+        anns_by_img: dict[int, list] = {}
+        for ann in coco.get("annotations", []):
+            anns_by_img.setdefault(ann["image_id"], []).append(ann)
+
+        for img_id, img_info in img_index.items():
+            file_name = img_info.get("file_name", "")
+            img_path = root / file_name
+            if not img_path.exists():
+                img_path = root / "images" / file_name
+            if not img_path.exists():
+                continue
+            pil_img = Image.open(img_path).convert("RGB")
+            img_tensor = torch.from_numpy(np.array(pil_img).transpose(2, 0, 1)).float() / 255.0
+            boxes_list = []
+            labels_list = []
+            for ann in anns_by_img.get(img_id, []):
+                x, y, w, h = ann.get("bbox", [0, 0, 0, 0])
+                boxes_list.append([x, y, x + w, y + h])
+                labels_list.append(int(ann.get("category_id", 0)))
+            boxes = torch.tensor(boxes_list, dtype=torch.float32)
+            labels = torch.tensor(labels_list, dtype=torch.int64)
+            samples.append((img_tensor, boxes, labels))
+        return samples
+
+    # YOLO-style dataset
+    img_dir = root / "images"
+    label_dir = root / "labels"
+    for img_path in sorted(img_dir.glob("*")):
+        if img_path.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
+            continue
+        label_path = label_dir / (img_path.stem + ".txt")
+        pil_img = Image.open(img_path).convert("RGB")
+        w, h = pil_img.size
+        img_tensor = torch.from_numpy(np.array(pil_img).transpose(2, 0, 1)).float() / 255.0
+        boxes_list = []
+        labels_list = []
+        if label_path.exists():
+            with open(label_path, "r", encoding="utf-8") as fh:
+                for line in fh:
+                    parts = line.strip().split()
+                    if len(parts) != 5:
+                        continue
+                    cls, xc, yc, bw, bh = map(float, parts)
+                    x1 = (xc - bw / 2) * w
+                    y1 = (yc - bh / 2) * h
+                    x2 = (xc + bw / 2) * w
+                    y2 = (yc + bh / 2) * h
+                    boxes_list.append([x1, y1, x2, y2])
+                    labels_list.append(int(cls))
+        boxes = torch.tensor(boxes_list, dtype=torch.float32)
+        labels = torch.tensor(labels_list, dtype=torch.int64)
+        samples.append((img_tensor, boxes, labels))
+    return samples
 
 def load_process_vehicle_image(
     path: str,
