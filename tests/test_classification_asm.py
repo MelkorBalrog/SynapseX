@@ -11,6 +11,8 @@ sys.path.append(os.getcwd())
 from synapse.soc import SoC
 from synapse.models.redundant_ip import RedundantNeuralIP
 from synapsex.config import hp
+import io
+from contextlib import redirect_stdout
 
 
 class MinimalNeuralIP(RedundantNeuralIP):
