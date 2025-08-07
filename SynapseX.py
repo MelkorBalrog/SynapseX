@@ -98,8 +98,10 @@ class SynapseXGUI(tk.Tk):
         self.current_asm_path: Path | None = None
         self._build_menu()
         self._build_ui()
-        # keep references to PhotoImage objects to avoid garbage collection
-        self._figure_images: list[ImageTk.PhotoImage] = []
+        # keep references to PhotoImage objects keyed by ANN notebook so they
+        # remain valid while displayed; this also lets us release previous
+        # images when retraining
+        self._figure_images: dict[str, list[ImageTk.PhotoImage]] = {}
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self)
@@ -368,6 +370,14 @@ class SynapseXGUI(tk.Tk):
                 self.results_nb.add(ann_nb, text=key)
                 self.network_tabs[key] = ann_nb
             ann_nb = self.network_tabs[key]
+
+            # Remove old tabs and image references for this ANN to free memory
+            for tab in ann_nb.tabs():
+                ann_nb.forget(tab)
+                ann_nb.nametowidget(tab).destroy()
+            self._figure_images.pop(key, None)
+            images: list[ImageTk.PhotoImage] = []
+
             metrics = soc.neural_ip.metrics_by_ann.get(ann_id)
             if metrics:
                 metric_txt = ScrolledText(ann_nb, wrap="word", font=("Segoe UI", 10))
@@ -396,9 +406,11 @@ class SynapseXGUI(tk.Tk):
                 frame.rowconfigure(0, weight=1)
                 frame.columnconfigure(0, weight=1)
 
-                self._figure_images.append(photo)
+                images.append(photo)
                 ann_nb.add(frame, text=title)
                 plt.close(fig)
+            self._figure_images[key] = images
+
         soc.neural_ip.figures_by_ann.clear()
         soc.neural_ip.metrics_by_ann.clear()
 
