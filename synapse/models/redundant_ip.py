@@ -51,7 +51,6 @@ class RedundantNeuralIP:
         self.ann_map: Dict[int, PyTorchANN] = {}
         self.last_result: int | None = None
         self._argmax: Dict[int, int] = {}
-        self.vote_history: List[int] = []
         self.train_data_dir = train_data_dir
         self.class_names: list[str] | None = None
         self._cached_dataset: tuple[torch.Tensor, torch.Tensor, list[str]] | None = None
@@ -231,7 +230,6 @@ class RedundantNeuralIP:
         )
         result = int(probs.argmax(dim=1)[0])
         self._argmax[ann_id] = result
-        self.vote_history.append(result)
         print(f"ANN {ann_id} prediction: {result}")
         return result
 
