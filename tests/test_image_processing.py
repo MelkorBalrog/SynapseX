@@ -19,10 +19,11 @@ import os
 import sys
 
 import numpy as np
+import torch
 from PIL import Image
 
 sys.path.append(os.getcwd())
-from synapsex.image_processing import load_process_shape_image
+from synapsex.image_processing import load_process_shape_image, load_process_vehicle_image
 
 def test_load_process_shape_image_angle_control(tmp_path):
     img = Image.fromarray(np.zeros((10, 10), dtype=np.uint8))
@@ -32,3 +33,13 @@ def test_load_process_shape_image_angle_control(tmp_path):
     single = load_process_shape_image(str(path), angles=[0])
     assert len(multi) == 2
     assert len(single) == 1
+
+
+def test_load_process_vehicle_image_shape(tmp_path):
+    img = Image.fromarray(np.zeros((20, 20, 3), dtype=np.uint8))
+    path = tmp_path / "vehicle.png"
+    img.save(path)
+    tensor = load_process_vehicle_image(str(path), target_size=32, augment=False)
+    assert tensor.shape == (3, 32, 32)
+    assert tensor.dtype == torch.float32
+    assert float(tensor.max()) <= 3 and float(tensor.min()) >= -3
