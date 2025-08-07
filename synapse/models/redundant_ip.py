@@ -288,14 +288,32 @@ class RedundantNeuralIP:
                 # If the cached dataset size is not a multiple of 72 it was
                 # likely generated without rotation, so regenerate to ensure
                 # the confusion matrix accounts for all augmented images.
-                if X.shape[0] % 72 != 0:
+                class_dirs = [d for d in Path(self.train_data_dir).iterdir() if d.is_dir()]
+                expected_labels = list(range(len(class_dirs)))
+                unique_labels = sorted(torch.unique(y).tolist())
+                if X.shape[0] % 72 != 0 or unique_labels != expected_labels:
                     X = y = None
 
             if X is None or y is None:
                 X, y = load_vehicle_dataset(self.train_data_dir, hp.image_size)
                 np.save(data_path, X.numpy())
                 np.save(labels_path, y.numpy())
+            num_classes = len(torch.unique(y))
+            hp.num_classes = num_classes
+            for ann_id, ann in list(self.ann_map.items()):
+                if ann.hp.num_classes != num_classes:
+                    ann_hp = replace(ann.hp, num_classes=num_classes)
+                    self.ann_map[ann_id] = PyTorchANN(ann_hp)
 
             self._cached_dataset = (X, y)
+        else:
+            X, y = self._cached_dataset
+            num_classes = len(torch.unique(y))
+            if hp.num_classes != num_classes:
+                hp.num_classes = num_classes
+                for ann_id, ann in list(self.ann_map.items()):
+                    if ann.hp.num_classes != num_classes:
+                        ann_hp = replace(ann.hp, num_classes=num_classes)
+                        self.ann_map[ann_id] = PyTorchANN(ann_hp)
         return self._cached_dataset
 
