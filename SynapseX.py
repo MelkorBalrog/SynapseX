@@ -261,11 +261,20 @@ class SynapseXGUI(tk.Tk):
         text.config(state="disabled")
         sub_nb.add(frame, text=f"Run {len(sub_nb.tabs())+1}")
 
+        # Remove any prior processed image tab to free memory
+        for tab in sub_nb.tabs():
+            if sub_nb.tab(tab, "text") == "Processed":
+                sub_nb.forget(tab)
+                sub_nb.nametowidget(tab).destroy()
+                break
+
         img_arr = (processed.reshape(28, 28) * 255).astype(np.uint8)
         proc_photo = ImageTk.PhotoImage(Image.fromarray(img_arr))
         img_lbl = ttk.Label(sub_nb, image=proc_photo)
         img_lbl.image = proc_photo
-        self._figure_images.append(proc_photo)
+        # Store image reference under a fixed key so we can drop old images
+        self._figure_images.pop("Classification", None)
+        self._figure_images.setdefault("Classification", []).append(proc_photo)
         sub_nb.add(img_lbl, text="Processed")
 
         sub_nb.select(frame)
