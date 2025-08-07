@@ -173,7 +173,7 @@ class RedundantNeuralIP:
                     except (OSError, ValueError, json.JSONDecodeError):
                         pass
             if self.train_data_dir:
-                self._load_dataset()
+                self._load_class_metadata()
             dropout = float(tokens[2]) if len(tokens) >= 3 else hp.dropout
             hparams = HyperParameters(**{**hp.__dict__, "dropout": dropout})
             self.ann_map[ann_id] = PyTorchANN(hparams)
@@ -259,6 +259,26 @@ class RedundantNeuralIP:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+    def _load_class_metadata(self) -> None:
+        """Derive class names and counts from the training directory.
+
+        The classification assembly program requires that ``hp.num_classes`` and
+        ``self.class_names`` reflect the dataset layout.  Scanning the training
+        directory at configuration time avoids loading the full dataset when we
+        only need label information for inference.
+        """
+
+        if self.class_names is not None or not self.train_data_dir:
+            return
+
+        root = Path(self.train_data_dir)
+        class_names = sorted([d.name for d in root.iterdir() if d.is_dir()])
+        if not class_names:
+            return
+
+        hp.num_classes = len(class_names)
+        self.class_names = class_names
+
     def _load_dataset(self):
         if self._cached_dataset is None:
             if not self.train_data_dir:
