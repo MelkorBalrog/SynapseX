@@ -203,7 +203,10 @@ class RedundantNeuralIP:
                     except (OSError, ValueError, json.JSONDecodeError):
                         pass
             if self.train_data_dir:
-                self._load_class_metadata()
+                # Ensure class metadata always mirrors the training directory so
+                # the ANN's ``num_classes`` and class name mapping stay in sync
+                # between training and inference.
+                self._load_class_metadata(force=True)
             dropout = float(tokens[2]) if len(tokens) >= 3 else hp.dropout
             hparams = HyperParameters(**{**hp.__dict__, "dropout": dropout})
             self.ann_map[ann_id] = PyTorchANN(hparams, device=self.device)
@@ -249,7 +252,9 @@ class RedundantNeuralIP:
         addr_bytes = IMAGE_BUFFER_BASE_ADDR_BYTES
         addr = addr_bytes // 4
         in_dim = (
-            ann.hp.image_channels * ann.hp.image_size * ann.hp.image_size
+            getattr(ann.hp, "image_channels", hp.image_channels)
+            * getattr(ann.hp, "image_size", hp.image_size)
+            * getattr(ann.hp, "image_size", hp.image_size)
         )
         data: List[float] = []
         for i in range(in_dim):
@@ -297,16 +302,22 @@ class RedundantNeuralIP:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    def _load_class_metadata(self) -> None:
+    def _load_class_metadata(self, force: bool = False) -> None:
         """Derive class names and counts from the training directory.
 
-        The classification assembly program requires that ``hp.num_classes`` and
-        ``self.class_names`` reflect the dataset layout.  Scanning the training
-        directory at configuration time avoids loading the full dataset when we
-        only need label information for inference.
+        Parameters
+        ----------
+        force:
+            When ``True`` the directory is scanned even if class names have
+            already been populated.  This helps ensure ``hp.num_classes`` always
+            reflects the current dataset which is vital for consistent
+            inference.
         """
 
-        if self.class_names is not None or not self.train_data_dir:
+        if not self.train_data_dir:
+            return
+
+        if self.class_names is not None and not force:
             return
 
         root = Path(self.train_data_dir)
