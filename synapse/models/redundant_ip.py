@@ -29,6 +29,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Dict, List
 import json
+import logging
 
 import matplotlib
 matplotlib.use("Agg")
@@ -104,14 +105,15 @@ class RedundantNeuralIP:
             for ann_id, ann in self.ann_map.items():
                 weight_path = Path(f"{prefix}_{ann_id}.pt")
                 if not weight_path.exists():
-                    print(f"Weight file {weight_path} not found for ANN {ann_id}")
-                    continue
+                    msg = f"Weight file {weight_path} not found for ANN {ann_id}"
+                    logging.error(msg)
+                    raise FileNotFoundError(msg)
                 try:
                     ann.load(str(weight_path))
                 except Exception as e:  # pragma: no cover - propagate unexpected errors
                     msg = f"Failed to load weights for ANN {ann_id} from {weight_path}: {e}"
-                    print(msg)
-                    raise
+                    logging.error(msg)
+                    raise RuntimeError(msg) from e
             meta_path = Path(f"{prefix}_meta.json")
             if meta_path.exists():
                 try:

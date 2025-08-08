@@ -80,6 +80,12 @@ class-named directory.
 python SynapseX.py train data/vehicles
 ```
 
+### Loading saved weights
+
+The `LOAD_ALL` instruction expects weight files like `weights_0.pt` and an
+optional `weights_meta.json` in the working directory. Ensure these files exist
+before invoking `LOAD_ALL`; otherwise a `FileNotFoundError` will be raised.
+
 ### Preparing an annotated detection dataset
 
 `load_annotated_dataset` understands both COCO and YOLO layouts.

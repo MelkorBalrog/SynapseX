@@ -60,6 +60,8 @@ def test_classification_asm_majority(tmp_path):
 
     meta_path = tmp_path / "trained_weights_meta.json"
     meta_path.write_text(json.dumps({"num_classes": 3}))
+    for i in range(3):
+        (tmp_path / f"trained_weights_{i}.pt").write_text("dummy")
 
     cwd = os.getcwd()
     os.chdir(tmp_path)
