@@ -299,6 +299,7 @@ class PyTorchANN:
             with torch.no_grad():
                 for _ in range(self.hp.mc_dropout_passes):
                     preds.append(self.model(X))
+            self.model.eval()  # restore evaluation mode
             mean = torch.stack(preds).mean(0)
             self.model.eval()
             return nn.functional.softmax(mean, dim=1).cpu()
