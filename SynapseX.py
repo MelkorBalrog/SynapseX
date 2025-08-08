@@ -151,6 +151,7 @@ class SynapseXGUI(tk.Tk):
             borderwidth=0,
             highlightthickness=0,
             state="disabled",
+            font=("Consolas", 11),
         )
         self.asm_text = tk.Text(self.asm_frame, wrap="none", font=("Consolas", 11))
         self.asm_text.tag_configure("instr", foreground="#0066CC")
