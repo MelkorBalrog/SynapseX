@@ -619,16 +619,27 @@ def main() -> None:
             print(f"Image '{image_path}' not found.")
             return
         soc = SoC()
-        processed = load_process_shape_image(str(image_path), target_size=hp.image_size, angles=[0])[0]
-        base_addr_bytes = IMAGE_BUFFER_BASE_ADDR_BYTES
-        for i, val in enumerate(processed):
-            word = np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
-            soc.memory.write(base_addr_bytes // 4 + i, int(word))
+        processed_list = load_process_shape_image(
+            str(image_path), target_size=hp.image_size, angles=range(0, 360, 5)
+        )
         asm_lines = load_asm_file(Path("asm") / "classification.asm")
         soc.load_assembly(asm_lines)
-        soc.run(max_steps=3000)
-        result = soc.cpu.get_reg("$t9")
+        base_addr = IMAGE_BUFFER_BASE_ADDR_BYTES // 4
+        preds: list[int] = []
+        for processed in processed_list:
+            for i, val in enumerate(processed):
+                word = np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
+                soc.memory.write(base_addr + i, int(word))
+            soc.cpu.pc = 0
+            soc.cpu.running = True
+            for reg in list(soc.cpu.regs):
+                if reg != "$zero":
+                    soc.cpu.regs[reg] = 0
+            soc.run(max_steps=3000)
+            preds.append(soc.cpu.get_reg("$t9"))
         names = soc.neural_ip.class_names
+        counts = np.bincount(preds, minlength=len(names) if names else 0)
+        result = int(counts.argmax())
         label = names[result] if names and 0 <= result < len(names) else result
         print(f"\nClassification Phase Completed!\nPredicted class: {label}")
     elif mode == "test":
