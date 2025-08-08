@@ -144,6 +144,7 @@ class SynapseXGUI(tk.Tk):
         self.asm_text.tag_configure("instr", foreground="#0066CC")
         self.asm_text.tag_configure("number", foreground="#CC0000")
         self.asm_text.tag_configure("comment", foreground="#008000")
+        self.asm_text.tag_configure("register", foreground="#FFA500")
         self.asm_text.bind("<<Modified>>", self._on_asm_modified)
         x_scroll = ttk.Scrollbar(self.asm_frame, orient="horizontal", command=self.asm_text.xview)
         y_scroll = ttk.Scrollbar(self.asm_frame, orient="vertical", command=self.asm_text.yview)
@@ -228,16 +229,19 @@ class SynapseXGUI(tk.Tk):
             instr = "#569CD6"
             number = "#FF00FF"
             comment = "#6A9955"
+            reg = "#FFFF00"
         else:
             bg = "white"
             fg = "black"
             instr = "#0066CC"
             number = "#CC0000"
             comment = "#008000"
+            reg = "#FFA500"
         self.asm_text.configure(background=bg, foreground=fg, insertbackground=fg)
         self.asm_text.tag_configure("instr", foreground=instr)
         self.asm_text.tag_configure("number", foreground=number)
         self.asm_text.tag_configure("comment", foreground=comment)
+        self.asm_text.tag_configure("register", foreground=reg)
 
     def toggle_dark_mode(self) -> None:
         self.dark_mode = not self.dark_mode
@@ -382,6 +386,7 @@ class SynapseXGUI(tk.Tk):
         self.asm_text.tag_remove("instr", "1.0", tk.END)
         self.asm_text.tag_remove("number", "1.0", tk.END)
         self.asm_text.tag_remove("comment", "1.0", tk.END)
+        self.asm_text.tag_remove("register", "1.0", tk.END)
         for line_no, line in enumerate(text.splitlines(), start=1):
             code, sep, _comment = line.partition(";")
             tokens = code.split()
@@ -398,6 +403,10 @@ class SynapseXGUI(tk.Tk):
                 num_start = f"{line_no}.{match.start()}"
                 num_end = f"{line_no}.{match.end()}"
                 self.asm_text.tag_add("number", num_start, num_end)
+            for match in re.finditer(r"\$[A-Za-z0-9]+", code):
+                reg_start = f"{line_no}.{match.start()}"
+                reg_end = f"{line_no}.{match.end()}"
+                self.asm_text.tag_add("register", reg_start, reg_end)
             if sep:
                 col = len(code)
                 start = f"{line_no}.{col}"
