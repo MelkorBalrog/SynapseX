@@ -27,6 +27,7 @@ from synapsex.image_processing import (
     load_process_shape_image,
     load_annotated_dataset,
     load_process_vehicle_image,
+    preprocess_vehicle_image,
 )
 
 def test_load_process_shape_image_angle_control(tmp_path):
@@ -65,3 +66,13 @@ def test_load_process_vehicle_image_shape(tmp_path):
     assert tensor.shape == (3, 32, 32)
     assert tensor.dtype == torch.float32
     assert float(tensor.max()) <= 3 and float(tensor.min()) >= -3
+
+
+def test_preprocess_vehicle_image_matches_training(tmp_path):
+    img = Image.fromarray(np.zeros((20, 20), dtype=np.uint8))
+    path = tmp_path / "vehicle.png"
+    img.save(path)
+    proc = preprocess_vehicle_image(str(path), target_size=16)
+    train_proc = load_process_shape_image(str(path), target_size=16, angles=[0])[0]
+    assert proc.shape == torch.Size([256])
+    assert torch.allclose(proc, torch.from_numpy(train_proc), atol=1e-6)
