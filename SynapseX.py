@@ -42,7 +42,10 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 import numpy as np
 
-from synapsex.image_processing import load_process_shape_image
+from synapsex.image_processing import (
+    load_process_shape_image,
+    preprocess_vehicle_image,
+)
 
 from synapse.soc import SoC
 from synapse.tracking import Detection, SortTracker
@@ -513,7 +516,7 @@ def main() -> None:
             print(f"Image '{image_path}' not found.")
             return
         soc = SoC()
-        processed = load_process_shape_image(str(image_path), angles=[0])[0]
+        processed = preprocess_vehicle_image(image_path).numpy().ravel()
         base_addr_bytes = IMAGE_BUFFER_BASE_ADDR_BYTES
         for i, val in enumerate(processed):
             word = np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
