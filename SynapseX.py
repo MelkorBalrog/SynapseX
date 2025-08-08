@@ -43,6 +43,7 @@ from tkinter.scrolledtext import ScrolledText
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 import numpy as np
+import torch
 
 from synapsex.image_processing import load_process_shape_image, load_vehicle_dataset
 from synapsex.config import hp
@@ -538,18 +539,30 @@ def classify_with_assembly(
         metadata is available).
     """
 
+    # Mirror the preprocessing performed during training so inference receives
+    # identically formatted tensors.  ``load_process_shape_image`` is used by
+    # :func:`load_vehicle_dataset` which prepares the training set.
+
     soc = soc or SoC()
     asm_lines = load_asm_file(Path("asm") / "classification.asm")
     soc.load_assembly(asm_lines)
+
     processed_list = load_process_shape_image(
         str(image_path), target_size=hp.image_size, angles=angles
     )
+
     base_addr = IMAGE_BUFFER_BASE_ADDR_BYTES // 4
     preds: list[int] = []
+
     for processed in processed_list:
-        for i, val in enumerate(processed):
+        # Convert to a tensor before flattening to mimic the training pipeline
+        tensor = torch.from_numpy(processed)
+        flat = tensor.flatten().numpy()
+
+        for i, val in enumerate(flat):
             word = np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
             soc.memory.write(base_addr + i, int(word))
+
         soc.cpu.pc = 0
         soc.cpu.running = True
         for reg in list(soc.cpu.regs):
