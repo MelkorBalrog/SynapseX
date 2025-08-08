@@ -46,9 +46,17 @@ class PyTorchANN:
         Optional ``HyperParameters`` instance.  When provided it overrides the
         global configuration and allows techniques such as genetic algorithms to
         propose new hyper-parameter sets.
+    device:
+        Explicit device on which the model should run.  Defaults to ``cuda`` when
+        available.
     """
 
-    def __init__(self, hp_override: Optional[HyperParameters] = None):
+    def __init__(
+        self,
+        hp_override: Optional[HyperParameters] = None,
+        *,
+        device: torch.device | str | None = None,
+    ):
         self.hp = hp_override or hp
         patch_size = max(self.hp.image_size // 4, 1)
         embed_dim = patch_size * patch_size
@@ -57,7 +65,9 @@ class PyTorchANN:
                 if embed_dim % candidate == 0:
                     self.hp = replace(self.hp, nhead=candidate)
                     break
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(
+            device if device is not None else ("cuda" if torch.cuda.is_available() else "cpu")
+        )
         self.model = TransformerClassifier(
             self.hp.image_size,
             num_classes=self.hp.num_classes,
@@ -376,7 +386,11 @@ class PyTorchANN:
         from .genetic import genetic_search
 
         best_hp, best_ann = genetic_search(
-            X, y, generations=generations, population_size=population_size
+            X,
+            y,
+            generations=generations,
+            population_size=population_size,
+            device=self.device,
         )
         self.hp = best_hp
         self.model = best_ann.model

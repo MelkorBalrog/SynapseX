@@ -48,7 +48,15 @@ from synapse.constants import IMAGE_BUFFER_BASE_ADDR_BYTES
 class RedundantNeuralIP:
     """Container for multiple ANNs addressable by an ID."""
 
-    def __init__(self, train_data_dir: str | None = None) -> None:
+    def __init__(
+        self,
+        train_data_dir: str | None = None,
+        *,
+        device: torch.device | str | None = None,
+    ) -> None:
+        self.device = torch.device(
+            device if device is not None else ("cuda" if torch.cuda.is_available() else "cpu")
+        )
         self.ann_map: Dict[int, PyTorchANN] = {}
         self.last_result: int | None = None
         self._argmax: Dict[int, int] = {}
@@ -198,7 +206,7 @@ class RedundantNeuralIP:
                 self._load_class_metadata()
             dropout = float(tokens[2]) if len(tokens) >= 3 else hp.dropout
             hparams = HyperParameters(**{**hp.__dict__, "dropout": dropout})
-            self.ann_map[ann_id] = PyTorchANN(hparams)
+            self.ann_map[ann_id] = PyTorchANN(hparams, device=self.device)
 
     # ------------------------------------------------------------------
     # TRAIN_ANN helpers
@@ -280,6 +288,7 @@ class RedundantNeuralIP:
             y,
             generations=generations,
             population_size=population,
+            device=self.device,
         )
         self.ann_map[ann_id] = best_ann
 
