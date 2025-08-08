@@ -261,11 +261,11 @@ class RedundantNeuralIP:
             word = memory.read(addr + i)
             data.append(np.frombuffer(np.uint32(word).tobytes(), dtype=np.float32)[0])
         X = np.array(data, dtype=np.float32).reshape(1, -1)
-        probs = ann.predict(
+        result_tensor = ann.predict_class(
             torch.from_numpy(X),
             mc_dropout=len(tokens) > 1 and tokens[1].lower() == "true",
         )
-        result = int(probs.argmax(dim=1)[0])
+        result = int(result_tensor[0])
         self._argmax[ann_id] = result
         name = (
             self.class_names[result]

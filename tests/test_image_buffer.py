@@ -27,6 +27,10 @@ def test_ann_receives_written_image_data():
             self.last_tensor = tensor
             return torch.zeros((1, 1))
 
+        def predict_class(self, tensor, mc_dropout=False):
+            self.last_tensor = tensor
+            return torch.tensor([0])
+
     ip.ann_map[0] = MockANN(img_size, img_channels)
     memory = WishboneMemory()
     base_words = IMAGE_BUFFER_BASE_ADDR_BYTES // 4
