@@ -96,10 +96,16 @@ class RedundantNeuralIP:
         elif op == "LOAD_ALL":
             prefix = tokens[1] if len(tokens) > 1 else "weights"
             for ann_id, ann in self.ann_map.items():
+                weight_path = Path(f"{prefix}_{ann_id}.pt")
+                if not weight_path.exists():
+                    print(f"Weight file {weight_path} not found for ANN {ann_id}")
+                    continue
                 try:
-                    ann.load(f"{prefix}_{ann_id}.pt")
-                except FileNotFoundError:
-                    pass
+                    ann.load(str(weight_path))
+                except Exception as e:  # pragma: no cover - propagate unexpected errors
+                    msg = f"Failed to load weights for ANN {ann_id} from {weight_path}: {e}"
+                    print(msg)
+                    raise
             meta_path = Path(f"{prefix}_meta.json")
             if meta_path.exists():
                 try:
