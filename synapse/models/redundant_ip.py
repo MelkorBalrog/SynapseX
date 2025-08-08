@@ -92,7 +92,13 @@ class RedundantNeuralIP:
                 ann.save(f"{prefix}_{ann_id}.pt")
             meta_path = Path(f"{prefix}_meta.json")
             with open(meta_path, "w", encoding="utf-8") as f:
-                json.dump({"num_classes": hp.num_classes}, f)
+                json.dump(
+                    {
+                        "num_classes": hp.num_classes,
+                        "class_names": self.class_names or [],
+                    },
+                    f,
+                )
         elif op == "LOAD_ALL":
             prefix = tokens[1] if len(tokens) > 1 else "weights"
             for ann_id, ann in self.ann_map.items():
@@ -112,6 +118,8 @@ class RedundantNeuralIP:
                     with open(meta_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
                     hp.num_classes = int(data.get("num_classes", hp.num_classes))
+                    if "class_names" in data:
+                        self.class_names = list(data["class_names"])
                 except (OSError, ValueError, json.JSONDecodeError):
                     pass
         elif op == "SAVE_PROJECT":
@@ -176,6 +184,8 @@ class RedundantNeuralIP:
                         with open(meta_path, "r", encoding="utf-8") as f:
                             data = json.load(f)
                         hp.num_classes = int(data.get("num_classes", hp.num_classes))
+                        if "class_names" in data:
+                            self.class_names = list(data["class_names"])
                     except (OSError, ValueError, json.JSONDecodeError):
                         pass
             if self.train_data_dir:
@@ -236,12 +246,12 @@ class RedundantNeuralIP:
         )
         result = int(probs.argmax(dim=1)[0])
         self._argmax[ann_id] = result
-        label = (
+        name = (
             self.class_names[result]
             if self.class_names and 0 <= result < len(self.class_names)
             else result
         )
-        print(f"ANN {ann_id} prediction: {label}")
+        print(f"ANN {ann_id} prediction: {name}")
         return result
 
     # ------------------------------------------------------------------

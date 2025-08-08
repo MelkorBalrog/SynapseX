@@ -18,6 +18,7 @@ def test_save_all_writes_metadata(tmp_path):
         assert meta_path.exists()
         data = json.loads(meta_path.read_text())
         assert data["num_classes"] == 5
+        assert data["class_names"] == []
     finally:
         for k, v in orig.items():
             setattr(hp, k, v)
