@@ -41,11 +41,20 @@ class SoC:
         self.video_ip = VideoProcIP()
         self.neural_ip = RedundantNeuralIP(train_data_dir=train_data_dir, device=self.device)
         self.cpu = CPU("CPU1", self.video_ip, self.neural_ip, self.memory, self.mmu)
-        # Ensure result register starts clean to avoid stale predictions
-        self.cpu.set_reg("$t9", 0)
+        # Ensure CPU starts in a clean state
+        self.reset_cpu()
         self.asm_program = []
         self.label_map = {}
         self.data_map = {}
+
+    # ------------------------------------------------------------------
+    def reset_cpu(self):
+        """Reset CPU state so each run starts clean."""
+        self.cpu.pc = 0
+        self.cpu.running = True
+        for reg in list(self.cpu.regs.keys()):
+            if reg != "$zero":
+                self.cpu.set_reg(reg, 0)
 
     # ------------------------------------------------------------------
     def load_assembly(self, lines):
@@ -55,6 +64,7 @@ class SoC:
         self._preprocess_data()
         self.cpu.set_label_map(self.label_map)
         self.cpu.set_data_map(self.data_map)
+        self.reset_cpu()
 
     def _preprocess_labels(self):
         self.label_map = {}
@@ -83,6 +93,7 @@ class SoC:
 
     # ------------------------------------------------------------------
     def run(self, max_steps=100):
+        self.reset_cpu()
         for _ in range(max_steps):
             if self.cpu.running:
                 self.cpu.step(self.asm_program)
