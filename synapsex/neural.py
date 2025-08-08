@@ -295,11 +295,12 @@ class PyTorchANN:
         X = self._format_input(X).to(self.device)
         if mc_dropout:
             self.model.train()  # enable dropout
-            preds: List[torch.Tensor] = []
+            preds = []
             with torch.no_grad():
                 for _ in range(self.hp.mc_dropout_passes):
-                    preds.append(self.model(X).cpu())
+                    preds.append(self.model(X))
             mean = torch.stack(preds).mean(0)
+            self.model.eval()
             return nn.functional.softmax(mean, dim=1).cpu()
         else:
             self.model.eval()
