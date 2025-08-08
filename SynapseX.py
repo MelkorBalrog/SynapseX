@@ -42,6 +42,7 @@ from tkinter.scrolledtext import ScrolledText
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 import numpy as np
+import torch
 
 from synapsex.image_processing import load_process_shape_image
 from synapsex.config import hp
@@ -510,7 +511,6 @@ class SynapseXGUI(tk.Tk):
 
         soc.neural_ip.figures_by_ann.clear()
         soc.neural_ip.metrics_by_ann.clear()
-
 
 
 def main() -> None:
