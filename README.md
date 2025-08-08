@@ -30,7 +30,8 @@ virtual CPU and a neural accelerator used for training and classifying objects.
 - **Graphical interface.** `python SynapseX.py gui` opens a Tk GUI to edit and
   execute assembly files, load images and inspect results.
 - **Dark mode.** The ASM editor now launches in dark mode with magenta numbers
-  and can toggle to a light theme for comfortable coding.
+  and yellow registers, and can toggle to a light theme with red numbers and
+  orange registers for comfortable coding.
 - **Training and inference.** Neural networks can be trained on a directory of
   labelled images or used to classify a single image from the command line.
 - **Evaluation metrics.** Training curves track loss, accuracy, precision,
