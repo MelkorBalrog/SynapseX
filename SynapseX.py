@@ -35,6 +35,8 @@ import re
 import sys
 from contextlib import redirect_stdout
 from pathlib import Path
+from collections import Counter
+from typing import Iterable
 import tkinter as tk
 from tkinter import filedialog, ttk
 from tkinter.scrolledtext import ScrolledText
@@ -345,22 +347,13 @@ class SynapseXGUI(tk.Tk):
         )
         if not path:
             return
-        processed = load_process_shape_image(path, angles=[0])[0]
         train_dir = self.data_entry.get() or None
         soc = SoC(train_data_dir=train_dir)
-        base_addr_bytes = IMAGE_BUFFER_BASE_ADDR_BYTES
-        for i, val in enumerate(processed):
-            word = np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
-            soc.memory.write(base_addr_bytes // 4 + i, int(word))
-        asm_lines = load_asm_file(Path("asm") / "classification.asm")
-        soc.load_assembly(asm_lines)
         buf = io.StringIO()
         with redirect_stdout(buf):
-            soc.run(max_steps=3000)
+            _idx, label = classify_with_assembly(path, soc=soc)
         out = buf.getvalue()
-        result = soc.cpu.get_reg("$t9")
-        names = soc.neural_ip.class_names
-        label = names[result] if names and 0 <= result < len(names) else result
+        processed = load_process_shape_image(path, angles=[0])[0]
         if "Classification" not in self.network_tabs:
             sub_nb = ScrollableNotebook(self.results_nb)
             self.results_nb.add(sub_nb, text="Classification")
@@ -519,6 +512,59 @@ class SynapseXGUI(tk.Tk):
         soc.neural_ip.metrics_by_ann.clear()
 
 
+def classify_with_assembly(
+    image_path: str,
+    *,
+    angles: Iterable[int] = range(0, 360, 5),
+    soc: SoC | None = None,
+):
+    """Classify ``image_path`` running the assembly program on all rotations.
+
+    Parameters
+    ----------
+    image_path:
+        Path to the image file to classify.
+    angles:
+        Iterable of rotation angles in degrees. By default the image is
+        rotated every 5° to match the training augmentation.
+    soc:
+        Optional :class:`~synapse.soc.SoC` instance. When ``None`` a fresh
+        instance is created.
+
+    Returns
+    -------
+    (index, label):
+        Tuple containing the predicted class index and its name (when class
+        metadata is available).
+    """
+
+    soc = soc or SoC()
+    asm_lines = load_asm_file(Path("asm") / "classification.asm")
+    soc.load_assembly(asm_lines)
+    processed_list = load_process_shape_image(
+        str(image_path), target_size=hp.image_size, angles=angles
+    )
+    base_addr = IMAGE_BUFFER_BASE_ADDR_BYTES // 4
+    preds: list[int] = []
+    for processed in processed_list:
+        for i, val in enumerate(processed):
+            word = np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
+            soc.memory.write(base_addr + i, int(word))
+        soc.cpu.pc = 0
+        soc.cpu.running = True
+        for reg in list(soc.cpu.regs):
+            if reg != "$zero":
+                soc.cpu.regs[reg] = 0
+        soc.run(max_steps=3000)
+        preds.append(soc.cpu.get_reg("$t9"))
+
+    counts = Counter(preds)
+    result = max(counts.items(), key=lambda kv: kv[1])[0]
+    names = soc.neural_ip.class_names
+    label = names[result] if names and 0 <= result < len(names) else result
+    return result, label
+
+
 def evaluate_with_assembly(train_dir: str, *, rotate: bool = True, soc: SoC | None = None):
     """Classify all images in ``train_dir`` using the assembly pipeline.
 
@@ -618,18 +664,7 @@ def main() -> None:
         if not image_path.is_file():
             print(f"Image '{image_path}' not found.")
             return
-        soc = SoC()
-        processed = load_process_shape_image(str(image_path), target_size=hp.image_size, angles=[0])[0]
-        base_addr_bytes = IMAGE_BUFFER_BASE_ADDR_BYTES
-        for i, val in enumerate(processed):
-            word = np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
-            soc.memory.write(base_addr_bytes // 4 + i, int(word))
-        asm_lines = load_asm_file(Path("asm") / "classification.asm")
-        soc.load_assembly(asm_lines)
-        soc.run(max_steps=3000)
-        result = soc.cpu.get_reg("$t9")
-        names = soc.neural_ip.class_names
-        label = names[result] if names and 0 <= result < len(names) else result
+        _idx, label = classify_with_assembly(str(image_path))
         print(f"\nClassification Phase Completed!\nPredicted class: {label}")
     elif mode == "test":
         if len(sys.argv) < 3:
