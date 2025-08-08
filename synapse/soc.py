@@ -16,6 +16,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """System-on-chip model for SynapseX."""
+import torch
+
 from .hardware.memory import WishboneMemory
 from .hardware.pcie import PCIeBridge
 from .hardware.videoproc import VideoProcIP
@@ -25,12 +27,19 @@ from .models.redundant_ip import RedundantNeuralIP
 
 
 class SoC:
-    def __init__(self, train_data_dir: str | None = None):
+    def __init__(
+        self,
+        train_data_dir: str | None = None,
+        device: torch.device | str | None = None,
+    ):
+        self.device = torch.device(
+            device if device is not None else ("cuda" if torch.cuda.is_available() else "cpu")
+        )
         self.memory = WishboneMemory()
         self.pcie_bridge = PCIeBridge()
         self.mmu = MMU()
         self.video_ip = VideoProcIP()
-        self.neural_ip = RedundantNeuralIP(train_data_dir=train_data_dir)
+        self.neural_ip = RedundantNeuralIP(train_data_dir=train_data_dir, device=self.device)
         self.cpu = CPU("CPU1", self.video_ip, self.neural_ip, self.memory, self.mmu)
         # Ensure result register starts clean to avoid stale predictions
         self.cpu.set_reg("$t9", 0)
