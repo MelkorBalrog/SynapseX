@@ -317,19 +317,22 @@ class PyTorchANN:
 
         When ``mc_dropout`` is ``True`` the model performs multiple stochastic
         forward passes with dropout enabled and returns the mean probability
-        distribution.  Otherwise a single deterministic pass is executed.
+        distribution.  The passes are executed in a single batched forward
+        call so inference remains fast.  Otherwise a single deterministic pass
+        is executed.
         """
 
         if mc_dropout:
             X = self._format_input(X).to(self.device)
             self.model.train()  # enable dropout during inference
-            preds = []
             with torch.no_grad():
-                for _ in range(self.hp.mc_dropout_passes):
-                    preds.append(self.model(X))
+                # Perform all stochastic passes in a single batched forward
+                # call so inference does not spend time looping in Python.
+                X_rep = X.repeat(self.hp.mc_dropout_passes, 1, 1, 1)
+                preds = self.model(X_rep)
+                preds = preds.view(self.hp.mc_dropout_passes, X.size(0), -1).mean(0)
             self.model.eval()  # restore evaluation mode
-            mean = torch.stack(preds).mean(0)
-            return nn.functional.softmax(mean, dim=1).cpu()
+            return nn.functional.softmax(preds, dim=1).cpu()
         logits = self._infer_logits(X)
         return nn.functional.softmax(logits, dim=1).cpu()
 
