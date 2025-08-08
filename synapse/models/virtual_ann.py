@@ -24,11 +24,16 @@ windows to pop up showing the training curves.
 """
 
 from typing import List
+import logging
+
 import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 import matplotlib.pyplot as plt
+
+
+logger = logging.getLogger(__name__)
 
 
 class VirtualANN(nn.Module):
@@ -68,6 +73,8 @@ class VirtualANN(nn.Module):
         a notebook tab).  When used in non-GUI contexts the caller may
         simply call ``fig.show()`` on the returned figures.
         """
+        if not logging.getLogger().hasHandlers():
+            logging.basicConfig(level=logging.INFO)
         dataset = TensorDataset(torch.from_numpy(X).float(), torch.from_numpy(y).long())
         loader = DataLoader(
             dataset,
@@ -80,10 +87,6 @@ class VirtualANN(nn.Module):
         loss_hist, acc_hist, prec_hist, rec_hist, f1_hist = [], [], [], [], []
         num_classes = self.layer_sizes[-1]
         self.train()
-
-        best_f1 = -1.0
-        stale_epochs = 0
-
         for epoch in range(epochs):
             epoch_loss = 0.0
             correct = 0
@@ -122,16 +125,17 @@ class VirtualANN(nn.Module):
                 f1s.append(f1)
             prec_hist.append(float(np.mean(precs)))
             rec_hist.append(float(np.mean(recs)))
-            mean_f1 = float(np.mean(f1s))
-            f1_hist.append(mean_f1)
-
-            if mean_f1 > best_f1 + 1e-4:
-                best_f1 = mean_f1
-                stale_epochs = 0
-            else:
-                stale_epochs += 1
-                if epoch + 1 >= min_epochs and stale_epochs >= patience:
-                    break
+            f1_hist.append(float(np.mean(f1s)))
+            logger.info(
+                "Epoch %d/%d - loss: %.4f - acc: %.4f - precision: %.4f - recall: %.4f - f1: %.4f",
+                epoch + 1,
+                epochs,
+                loss_hist[-1],
+                acc_hist[-1],
+                prec_hist[-1],
+                rec_hist[-1],
+                f1_hist[-1],
+            )
         preds_full = self.predict(X)
 
         figs = []

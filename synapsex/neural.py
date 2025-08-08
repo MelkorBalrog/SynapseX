@@ -34,6 +34,9 @@ from .models import TransformerClassifier
 from .image_processing import load_annotated_dataset
 
 
+logger = logging.getLogger(__name__)
+
+
 class PyTorchANN:
     """Wrapper around a PyTorch model with training and inference helpers.
 
@@ -137,6 +140,8 @@ class PyTorchANN:
         confusion matrix for consumers such as the GUI.  Callers can decide
         how to display or embed the returned figures."""
 
+        if not logging.getLogger().hasHandlers():
+            logging.basicConfig(level=logging.INFO)
         # Split the data into a deterministic training/validation partition so
         # early stopping decisions are based on unseen samples.  Datasets used
         # in the GUI can be tiny, so guard against edge cases where the split
@@ -176,7 +181,7 @@ class PyTorchANN:
         best_state: Optional[dict] = None
         stale_epochs = 0
 
-        for _ in range(self.hp.epochs):
+        for epoch in range(self.hp.epochs):
             epoch_loss = 0.0
             total = 0
             for xb, yb in train_loader:
@@ -198,6 +203,14 @@ class PyTorchANN:
             f1_hist.append(train_metrics["f1"])
 
             val_metrics = self.evaluate(val_X, val_y)
+            logger.info(
+                "Epoch %d/%d - loss: %.4f - train_f1: %.4f - val_f1: %.4f",
+                epoch + 1,
+                self.hp.epochs,
+                loss_hist[-1],
+                f1_hist[-1],
+                val_metrics["f1"],
+            )
             if val_metrics["f1"] > best_f1 + 1e-4:
                 best_f1 = val_metrics["f1"]
                 best_state = self.model.state_dict()
