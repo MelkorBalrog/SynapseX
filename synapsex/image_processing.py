@@ -167,9 +167,10 @@ def preprocess_vehicle_image(
 ) -> torch.Tensor:
     """Preprocess ``source`` using the same edge pipeline as training.
 
-    The returned tensor matches the representation produced by
-    :func:`load_vehicle_dataset`, ensuring consistency between training and
-    inference.
+    The returned tensor stacks the edge-detected image with the original
+    grayscale version, mirroring the representation produced by
+    :func:`load_vehicle_dataset`.  This keeps inference consistent with the
+    data seen during ANN training.
     """
     try:
         resample_bicubic = Image.Resampling.BICUBIC
@@ -183,8 +184,20 @@ def preprocess_vehicle_image(
     rotated = pil_img.rotate(
         0, resample=resample_bicubic, expand=True, fillcolor=bg_color
     )
-    processed = process_shape_image(rotated, target_size)
-    return torch.from_numpy(processed)
+    edge = process_shape_image(rotated, target_size)
+    try:
+        resample_lanczos = Image.Resampling.LANCZOS
+    except AttributeError:  # pragma: no cover - Pillow < 9
+        resample_lanczos = Image.LANCZOS
+    gray = (
+        np.array(
+            rotated.resize((target_size, target_size), resample=resample_lanczos),
+            dtype=np.float32,
+        )
+        / 255.0
+    ).flatten()
+    stacked = np.concatenate([edge, gray])
+    return torch.from_numpy(stacked)
 
 
 def load_vehicle_dataset(
@@ -206,9 +219,10 @@ def load_vehicle_dataset(
     Returns
     -------
     X, y, class_names:
-        ``X`` is a tensor of flattened images, ``y`` contains integer class
-        labels and ``class_names`` lists the class directory names in index
-        order.
+        ``X`` is a tensor of flattened images containing both the
+        edge-detected and grayscale channels stacked together.
+        ``y`` contains integer class labels and ``class_names`` lists the class
+        directory names in index order.
     """
 
     root = Path(root_dir)
@@ -222,11 +236,17 @@ def load_vehicle_dataset(
                 continue
             if rotate:
                 processed_list = load_process_shape_image(
-                    str(img_path), target_size=target_size, angles=range(0, 360, 5)
+                    str(img_path),
+                    target_size=target_size,
+                    angles=range(0, 360, 5),
+                    include_gray=True,
                 )
             else:
                 processed_list = load_process_shape_image(
-                    str(img_path), target_size=target_size, angles=[0]
+                    str(img_path),
+                    target_size=target_size,
+                    angles=[0],
+                    include_gray=True,
                 )
             for proc in processed_list:
                 images.append(torch.from_numpy(proc))
@@ -245,6 +265,8 @@ def load_process_shape_image(
     canny_high: float = 150,
     dilation_iter: int = 1,
     angles: Iterable[int] = range(0, 181, 10),
+    *,
+    include_gray: bool = False,
 ) -> List[np.ndarray]:
     try:
         resample_bicubic = Image.Resampling.BICUBIC
@@ -257,20 +279,36 @@ def load_process_shape_image(
     # exposed corners are filled with black which the edge detector interprets
     # as strong gradients, resulting in thick square artefacts after rotation.
     bg_color = pil_img.getpixel((0, 0))
+    try:
+        resample_lanczos = Image.Resampling.LANCZOS
+    except AttributeError:
+        resample_lanczos = Image.LANCZOS
+
     processed_images = []
     for angle in angles:
         rotated = pil_img.rotate(
             angle, resample=resample_bicubic, expand=True, fillcolor=bg_color
         )
-        processed_images.append(
-            process_shape_image(
-                rotated,
-                target_size=target_size,
-                canny_low=canny_low,
-                canny_high=canny_high,
-                dilation_iter=dilation_iter,
-            )
+        edge = process_shape_image(
+            rotated,
+            target_size=target_size,
+            canny_low=canny_low,
+            canny_high=canny_high,
+            dilation_iter=dilation_iter,
         )
+        if include_gray:
+            gray = (
+                np.array(
+                    rotated.resize(
+                        (target_size, target_size), resample=resample_lanczos
+                    ),
+                    dtype=np.float32,
+                )
+                / 255.0
+            ).flatten()
+            processed_images.append(np.concatenate([edge, gray]))
+        else:
+            processed_images.append(edge)
     return processed_images
 
 

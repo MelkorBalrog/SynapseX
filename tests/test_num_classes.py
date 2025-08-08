@@ -25,7 +25,7 @@ import pytest
 import torch
 from PIL import Image
 
-sys.path.append(os.getcwd())
+sys.path.insert(0, os.getcwd())
 from synapse.models.redundant_ip import RedundantNeuralIP
 from synapsex.config import hp
 

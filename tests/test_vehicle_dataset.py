@@ -22,7 +22,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-sys.path.append(os.getcwd())
+sys.path.insert(0, os.getcwd())
 from synapsex.image_processing import load_vehicle_dataset
 
 
@@ -36,7 +36,7 @@ def _prepare_dataset(tmp_path):
 def test_load_vehicle_dataset(tmp_path):
     _prepare_dataset(tmp_path)
     X, y, names = load_vehicle_dataset(tmp_path, target_size=8)
-    assert X.shape == (144, 64)
+    assert X.shape == (144, 128)
     assert torch.bincount(y).tolist() == [72, 72]
     assert names == ["car", "truck"]
 
@@ -44,6 +44,6 @@ def test_load_vehicle_dataset(tmp_path):
 def test_load_vehicle_dataset_no_rotate(tmp_path):
     _prepare_dataset(tmp_path)
     X, y, names = load_vehicle_dataset(tmp_path, target_size=8, rotate=False)
-    assert X.shape == (2, 64)
+    assert X.shape == (2, 128)
     assert y.tolist() == [0, 1]
     assert names == ["car", "truck"]

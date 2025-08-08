@@ -18,10 +18,11 @@
 """Classification utilities driven by the assembly program.
 
 These helpers mirror the exact preprocessing pipeline used during
-training so that inference results remain consistent.  Images are
-converted to edge maps via :func:`synapsex.image_processing.process_shape_image`
-and fed into the `classification.asm` program to obtain predictions from
-the configured neural networks.
+training so that inference results remain consistent.  Each input image is
+converted to an edge map via :func:`synapsex.image_processing.process_shape_image`
+and stacked with the original grayscale version before being fed into the
+`classification.asm` program to obtain predictions from the configured
+neural networks.
 """
 
 from __future__ import annotations
@@ -64,7 +65,10 @@ def classify_with_assembly(
     asm_lines = _load_asm_file(Path("asm") / "classification.asm")
     soc.load_assembly(asm_lines)
     processed_list = load_process_shape_image(
-        str(image_path), target_size=hp.image_size, angles=angles
+        str(image_path),
+        target_size=hp.image_size,
+        angles=angles,
+        include_gray=True,
     )
     base_addr = IMAGE_BUFFER_BASE_ADDR_BYTES // 4
     preds: list[int] = []

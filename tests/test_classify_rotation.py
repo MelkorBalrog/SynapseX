@@ -27,7 +27,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-sys.path.append(os.getcwd())
+sys.path.insert(0, os.getcwd())
 
 from SynapseX import classify_with_assembly  # noqa: E402
 from synapse.soc import SoC  # noqa: E402
@@ -40,7 +40,7 @@ class SeqNeuralIP(RedundantNeuralIP):
         def __init__(self, pred: int, num_classes: int = 2):
             self.pred = pred
             self.hp = SimpleNamespace(
-                image_size=1, image_channels=1, num_classes=num_classes
+                image_size=1, image_channels=2, num_classes=num_classes
             )
 
         def predict(self, _X, mc_dropout: bool = False):

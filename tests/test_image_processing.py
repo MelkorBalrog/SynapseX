@@ -22,7 +22,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-sys.path.append(os.getcwd())
+sys.path.insert(0, os.getcwd())
 from synapsex.image_processing import (
     load_process_shape_image,
     load_annotated_dataset,
@@ -73,6 +73,8 @@ def test_preprocess_vehicle_image_matches_training(tmp_path):
     path = tmp_path / "vehicle.png"
     img.save(path)
     proc = preprocess_vehicle_image(str(path), target_size=16)
-    train_proc = load_process_shape_image(str(path), target_size=16, angles=[0])[0]
-    assert proc.shape == torch.Size([256])
+    train_proc = load_process_shape_image(
+        str(path), target_size=16, angles=[0], include_gray=True
+    )[0]
+    assert proc.shape == torch.Size([512])
     assert torch.allclose(proc, torch.from_numpy(train_proc), atol=1e-6)

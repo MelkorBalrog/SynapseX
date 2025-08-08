@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import torch
 
-sys.path.append(os.getcwd())
+sys.path.insert(0, os.getcwd())
 
 from synapse.soc import SoC
 from synapse.models.redundant_ip import RedundantNeuralIP
@@ -20,7 +20,7 @@ class MinimalNeuralIP(RedundantNeuralIP):
         def __init__(self, pred, num_classes: int = 3):
             self.pred = pred
             self.hp = SimpleNamespace(
-                image_size=1, image_channels=1, num_classes=num_classes
+                image_size=1, image_channels=2, num_classes=num_classes
             )
 
         def predict(self, X, mc_dropout: bool = False):

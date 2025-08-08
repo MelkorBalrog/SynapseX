@@ -17,7 +17,9 @@ class MinimalNeuralIP(RedundantNeuralIP):
     class DummyANN:
         def __init__(self, pred, num_classes):
             self.pred = pred
-            self.hp = SimpleNamespace(image_size=hp.image_size, num_classes=num_classes)
+            self.hp = SimpleNamespace(
+                image_size=hp.image_size, image_channels=2, num_classes=num_classes
+            )
 
         def predict(self, X, mc_dropout: bool = False):
             probs = torch.zeros((1, self.hp.num_classes))
