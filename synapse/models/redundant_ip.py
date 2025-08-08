@@ -91,6 +91,8 @@ class RedundantNeuralIP:
             prefix = tokens[1] if len(tokens) > 1 else "weights"
             for ann_id, ann in self.ann_map.items():
                 ann.save(f"{prefix}_{ann_id}.pt")
+            if self.class_names is None:
+                self._load_class_metadata()
             meta_path = Path(f"{prefix}_meta.json")
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump(
@@ -147,6 +149,8 @@ class RedundantNeuralIP:
 
         base = Path(json_path).resolve().parent
         project: Dict[str, Dict[str, object]] = {}
+        if self.class_names is None:
+            self._load_class_metadata()
 
         for ann_id, ann in self.ann_map.items():
             weight_file = f"{weight_prefix}_{ann_id}.pt"
