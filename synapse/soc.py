@@ -40,8 +40,10 @@ class SoC:
 
     # ------------------------------------------------------------------
     def load_assembly(self, lines):
-        """Load assembly program and build label map."""
-        self.asm_program = lines[:]
+        """Load assembly program and build label map.
+
+        Lines are stored with 1-based line numbers to aid debugging."""
+        self.asm_program = list(enumerate(lines, start=1))
         self._preprocess_labels()
         self._preprocess_data()
         self.cpu.set_label_map(self.label_map)
@@ -49,7 +51,7 @@ class SoC:
 
     def _preprocess_labels(self):
         self.label_map = {}
-        for idx, line in enumerate(self.asm_program):
+        for idx, (_, line) in enumerate(self.asm_program):
             stripped = line.strip()
             if stripped.endswith(":"):
                 self.label_map[stripped[:-1]] = idx
@@ -58,7 +60,7 @@ class SoC:
         self.data_map = {}
         in_data = False
         addr = 0x4000
-        for line in self.asm_program:
+        for _, line in self.asm_program:
             stripped = line.strip()
             if stripped == ".data":
                 in_data = True
@@ -73,9 +75,17 @@ class SoC:
                 addr += size
 
     # ------------------------------------------------------------------
-    def run(self, max_steps=100):
+    def run(self, max_steps=100, debug: bool = False):
         for _ in range(max_steps):
             if self.cpu.running:
-                self.cpu.step(self.asm_program)
+                self.cpu.step(self.asm_program, debug=debug)
             else:
                 break
+
+    def debug_run(self, max_steps=100):
+        """Interactively step through the assembly program."""
+        for _ in range(max_steps):
+            if not self.cpu.running:
+                break
+            self.cpu.step(self.asm_program, debug=True)
+            input("Press Enter to continue...")

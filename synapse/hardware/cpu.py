@@ -56,73 +56,88 @@ class CPU:
             self.regs[r] = val & 0xFFFFFFFF
 
     # ------------------------------------------------------------------
-    def step(self, program):
+    def step(self, program, debug: bool = False):
         if not self.running:
             return
         if self.pc >= len(program):
             self.running = False
             return
-        line = program[self.pc].strip()
+        line_no, raw_line = program[self.pc]
         self.pc += 1
-        if line.startswith(";") or line == "" or line.endswith(":"):
+        line = raw_line.strip()
+        if debug:
+            print(f"{line_no}: {line}")
+        if (
+            line.startswith(";")
+            or line == ""
+            or line.endswith(":")
+            or line.startswith(".")
+        ):
             return
         parts = line.split()
         instr = parts[0].upper()
 
-        if instr == "HALT":
+        try:
+            if instr == "HALT":
+                self.running = False
+                if self.neural_ip.last_result is not None:
+                    result = self.get_reg("$t9")
+                    label_map = {
+                        idx: name
+                        for idx, name in enumerate(getattr(self.neural_ip, "class_names", []) or [])
+                    }
+                    print(f"Final classification: {label_map.get(result, result)}")
+            elif instr == "ADDI":
+                rd = parts[1].rstrip(",")
+                rs = parts[2].rstrip(",")
+                imm = int(parts[3], 0)
+                self.set_reg(rd, self.get_reg(rs) + imm)
+            elif instr == "ADD":
+                rd = parts[1].rstrip(",")
+                rs = parts[2].rstrip(",")
+                rt = parts[3]
+                self.set_reg(rd, self.get_reg(rs) + self.get_reg(rt))
+            elif instr == "BEQ":
+                rs = parts[1].rstrip(",")
+                rt = parts[2].rstrip(",")
+                label = parts[3]
+                if self.get_reg(rs) == self.get_reg(rt):
+                    self.pc = self.label_map.get(label, self.pc)
+            elif instr == "BGT":
+                rs = parts[1].rstrip(",")
+                rt = parts[2].rstrip(",")
+                label = parts[3]
+                if self._to_signed(self.get_reg(rs)) > self._to_signed(self.get_reg(rt)):
+                    self.pc = self.label_map.get(label, self.pc)
+            elif instr == "J":
+                label = parts[1]
+                self.pc = self.label_map.get(label, self.pc)
+            elif instr == "SLL":
+                rd = parts[1].rstrip(",")
+                rt = parts[2].rstrip(",")
+                sa = int(parts[3], 0)
+                self.set_reg(rd, (self.get_reg(rt) << sa) & 0xFFFFFFFF)
+            elif instr == "LW":
+                rt = parts[1].rstrip(",")
+                addr_token = parts[2]
+                addr = self._resolve_addr(addr_token) // 4
+                self.set_reg(rt, self.memory.read(addr))
+            elif instr == "SW":
+                rt = parts[1].rstrip(",")
+                addr_token = parts[2]
+                addr = self._resolve_addr(addr_token) // 4
+                self.memory.write(addr, self.get_reg(rt))
+            elif instr == "OP_NEUR":
+                subcmd = " ".join(parts[1:])
+                res = self.neural_ip.run_instruction(subcmd, memory=self.memory)
+                if res is not None:
+                    self.set_reg("$t9", int(res))
+            else:
+                self.running = False
+                raise ValueError
+        except Exception as e:
             self.running = False
-            if self.neural_ip.last_result is not None:
-                result = self.get_reg("$t9")
-                label_map = {
-                    idx: name
-                    for idx, name in enumerate(getattr(self.neural_ip, "class_names", []) or [])
-                }
-                print(f"Final classification: {label_map.get(result, result)}")
-        elif instr == "ADDI":
-            rd = parts[1].rstrip(",")
-            rs = parts[2].rstrip(",")
-            imm = int(parts[3], 0)
-            self.set_reg(rd, self.get_reg(rs) + imm)
-        elif instr == "ADD":
-            rd = parts[1].rstrip(",")
-            rs = parts[2].rstrip(",")
-            rt = parts[3]
-            self.set_reg(rd, self.get_reg(rs) + self.get_reg(rt))
-        elif instr == "BEQ":
-            rs = parts[1].rstrip(",")
-            rt = parts[2].rstrip(",")
-            label = parts[3]
-            if self.get_reg(rs) == self.get_reg(rt):
-                self.pc = self.label_map.get(label, self.pc)
-        elif instr == "BGT":
-            rs = parts[1].rstrip(",")
-            rt = parts[2].rstrip(",")
-            label = parts[3]
-            if self._to_signed(self.get_reg(rs)) > self._to_signed(self.get_reg(rt)):
-                self.pc = self.label_map.get(label, self.pc)
-        elif instr == "J":
-            label = parts[1]
-            self.pc = self.label_map.get(label, self.pc)
-        elif instr == "SLL":
-            rd = parts[1].rstrip(",")
-            rt = parts[2].rstrip(",")
-            sa = int(parts[3], 0)
-            self.set_reg(rd, (self.get_reg(rt) << sa) & 0xFFFFFFFF)
-        elif instr == "LW":
-            rt = parts[1].rstrip(",")
-            addr_token = parts[2]
-            addr = self._resolve_addr(addr_token) // 4
-            self.set_reg(rt, self.memory.read(addr))
-        elif instr == "SW":
-            rt = parts[1].rstrip(",")
-            addr_token = parts[2]
-            addr = self._resolve_addr(addr_token) // 4
-            self.memory.write(addr, self.get_reg(rt))
-        elif instr == "OP_NEUR":
-            subcmd = " ".join(parts[1:])
-            res = self.neural_ip.run_instruction(subcmd, memory=self.memory)
-            if res is not None:
-                self.set_reg("$t9", int(res))
+            raise ValueError(f"Invalid instruction at line {line_no}: {raw_line}") from e
 
     def _resolve_addr(self, token: str) -> int:
         token = token.strip()
