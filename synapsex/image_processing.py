@@ -176,25 +176,20 @@ def load_vehicle_dataset(
     labels: List[int] = []
     class_names = sorted([d.name for d in root.iterdir() if d.is_dir()])
     class_to_idx = {name: idx for idx, name in enumerate(class_names)}
-    try:
-        resample_bicubic = Image.Resampling.BICUBIC
-    except AttributeError:  # pragma: no cover - Pillow < 9
-        resample_bicubic = Image.BICUBIC
     for cls in class_names:
         for img_path in sorted((root / cls).glob("*")):
             if img_path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".bmp"}:
                 continue
-            pil_img = Image.open(img_path).convert("L")
             if rotate:
-                bg_color = pil_img.getpixel((0, 0))
-                for angle in range(0, 360, 5):
-                    rotated = pil_img.rotate(
-                        angle, resample=resample_bicubic, expand=True, fillcolor=bg_color
-                    )
-                    images.append(preprocess_vehicle_image(rotated, target_size))
-                    labels.append(class_to_idx[cls])
+                processed_list = load_process_shape_image(
+                    str(img_path), target_size=target_size, angles=range(0, 360, 5)
+                )
             else:
-                images.append(preprocess_vehicle_image(pil_img, target_size))
+                processed_list = load_process_shape_image(
+                    str(img_path), target_size=target_size, angles=[0]
+                )
+            for proc in processed_list:
+                images.append(torch.from_numpy(proc))
                 labels.append(class_to_idx[cls])
     if not images:
         raise ValueError("No images found in dataset")
