@@ -32,6 +32,7 @@ import json
 import logging
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -55,7 +56,9 @@ class RedundantNeuralIP:
         device: torch.device | str | None = None,
     ) -> None:
         self.device = torch.device(
-            device if device is not None else ("cuda" if torch.cuda.is_available() else "cpu")
+            device
+            if device is not None
+            else ("cuda" if torch.cuda.is_available() else "cpu")
         )
         self.ann_map: Dict[int, PyTorchANN] = {}
         self.last_result: int | None = None
@@ -178,7 +181,9 @@ class RedundantNeuralIP:
             }
 
         with open(json_path, "w", encoding="utf-8") as f:
-            json.dump({"anns": project, "class_names": self.class_names or []}, f, indent=2)
+            json.dump(
+                {"anns": project, "class_names": self.class_names or []}, f, indent=2
+            )
 
     # ------------------------------------------------------------------
     # CONFIG_ANN helpers
@@ -261,10 +266,12 @@ class RedundantNeuralIP:
             word = memory.read(addr + i)
             data.append(np.frombuffer(np.uint32(word).tobytes(), dtype=np.float32)[0])
         X = np.array(data, dtype=np.float32).reshape(1, -1)
-        result_tensor = ann.predict_class(
-            torch.from_numpy(X),
-            mc_dropout=len(tokens) > 1 and tokens[1].lower() == "true",
-        )
+        mc = len(tokens) > 1 and tokens[1].lower() == "true"
+        if hasattr(ann, "predict_class"):
+            result_tensor = ann.predict_class(torch.from_numpy(X), mc_dropout=mc)
+        else:
+            probs = ann.predict(torch.from_numpy(X), mc_dropout=mc)
+            result_tensor = torch.argmax(probs, dim=1)
         result = int(result_tensor[0])
         self._argmax[ann_id] = result
         name = (
@@ -336,8 +343,14 @@ class RedundantNeuralIP:
             data_path = Path(self.train_data_dir) / "data.npy"
             labels_path = Path(self.train_data_dir) / "labels.npy"
             classes_path = Path(self.train_data_dir) / "classes.json"
-            if not data_path.exists() or not labels_path.exists() or not classes_path.exists():
-                X, y, class_names = load_vehicle_dataset(self.train_data_dir, hp.image_size)
+            if (
+                not data_path.exists()
+                or not labels_path.exists()
+                or not classes_path.exists()
+            ):
+                X, y, class_names = load_vehicle_dataset(
+                    self.train_data_dir, hp.image_size
+                )
                 np.save(data_path, X.numpy())
                 np.save(labels_path, y.numpy())
                 with open(classes_path, "w", encoding="utf-8") as fh:
@@ -351,4 +364,3 @@ class RedundantNeuralIP:
             self.class_names = class_names
             self._cached_dataset = (X, y, class_names)
         return self._cached_dataset
-

@@ -20,6 +20,7 @@ from typing import Dict, Tuple, List, Optional
 
 import logging
 import matplotlib
+
 matplotlib.use("Agg")
 matplotlib.rcParams["figure.max_open_warning"] = 0
 import matplotlib.pyplot as plt
@@ -66,7 +67,9 @@ class PyTorchANN:
                     self.hp = replace(self.hp, nhead=candidate)
                     break
         self.device = torch.device(
-            device if device is not None else ("cuda" if torch.cuda.is_available() else "cpu")
+            device
+            if device is not None
+            else ("cuda" if torch.cuda.is_available() else "cpu")
         )
         self.model = TransformerClassifier(
             self.hp.image_size,
@@ -93,9 +96,13 @@ class PyTorchANN:
         if X.dim() == 1:
             X = X.unsqueeze(0)
         if X.dim() == 2:
-            return X.view(-1, self.hp.image_channels, self.hp.image_size, self.hp.image_size)
+            return X.view(
+                -1, self.hp.image_channels, self.hp.image_size, self.hp.image_size
+            )
         if X.dim() == 3 and X.size(1) == self.hp.image_channels:
-            return X.view(-1, self.hp.image_channels, self.hp.image_size, self.hp.image_size)
+            return X.view(
+                -1, self.hp.image_channels, self.hp.image_size, self.hp.image_size
+            )
         if X.dim() == 4:
             return X
         raise ValueError(f"Unexpected input shape {tuple(X.shape)}")
@@ -272,11 +279,17 @@ class PyTorchANN:
         gt_boxes = targets["boxes"].to(self.device)
         gt_labels = targets["labels"].to(self.device)
         if optimizer is None:
-            optimizer = torch.optim.Adam(self.model.parameters(), lr=self.hp.learning_rate)
+            optimizer = torch.optim.Adam(
+                self.model.parameters(), lr=self.hp.learning_rate
+            )
 
         optimizer.zero_grad()
         outputs = self.model(images)
-        if not isinstance(outputs, dict) or "logits" not in outputs or "boxes" not in outputs:
+        if (
+            not isinstance(outputs, dict)
+            or "logits" not in outputs
+            or "boxes" not in outputs
+        ):
             raise ValueError("Model must return a dict with 'logits' and 'boxes' keys")
 
         cls_loss = F.cross_entropy(outputs["logits"], gt_labels)
@@ -356,7 +369,11 @@ class PyTorchANN:
             raise ValueError("Detection output must contain 'scores'")
         keep = scores >= thresh
         filtered = {
-            k: v[keep] if isinstance(v, torch.Tensor) and v.shape[0] == scores.shape[0] else v
+            k: (
+                v[keep]
+                if isinstance(v, torch.Tensor) and v.shape[0] == scores.shape[0]
+                else v
+            )
             for k, v in outputs.items()
         }
         return filtered
@@ -386,7 +403,12 @@ class PyTorchANN:
         precision = float(sum(precision_list) / num_classes)
         recall = float(sum(recall_list) / num_classes)
         f1 = float(2 * precision * recall / (precision + recall + 1e-8))
-        return {"accuracy": accuracy, "precision": precision, "recall": recall, "f1": f1}
+        return {
+            "accuracy": accuracy,
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+        }
 
     def architecture(self) -> Dict[str, int]:
         """Return a dictionary describing the ANN structure."""
@@ -429,13 +451,13 @@ class PyTorchANN:
             hp_dict = state.get("hp")
             if hp_dict:
                 self.hp = HyperParameters(**hp_dict)
-                patch_size = max(self.hp.image_size // 4, 1)
-                embed_dim = patch_size * patch_size
-                if embed_dim % self.hp.nhead != 0:
-                    for candidate in range(self.hp.nhead, 0, -1):
-                        if embed_dim % candidate == 0:
-                            self.hp = replace(self.hp, nhead=candidate)
-                            break
+            patch_size = max(self.hp.image_size // 4, 1)
+            embed_dim = patch_size * patch_size
+            if not hp_dict and embed_dim % self.hp.nhead != 0:
+                for candidate in range(self.hp.nhead, 0, -1):
+                    if embed_dim % candidate == 0:
+                        self.hp = replace(self.hp, nhead=candidate)
+                        break
             self.model = TransformerClassifier(
                 self.hp.image_size,
                 num_classes=self.hp.num_classes,
@@ -475,7 +497,6 @@ class PyTorchANN:
                     result.missing_keys,
                     result.unexpected_keys,
                 )
-
 
     # ------------------------------------------------------------------
     # Visualisation helpers

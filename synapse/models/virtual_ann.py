@@ -40,15 +40,19 @@ class VirtualANN(nn.Module):
     def __init__(self, layer_sizes: List[int], dropout_rate: float = 0.2):
         super().__init__()
         self.layer_sizes = layer_sizes
-        layers = []
-        for i in range(len(layer_sizes) - 1):
-            in_dim = layer_sizes[i]
-            out_dim = layer_sizes[i + 1]
-            layers.append(nn.Linear(in_dim, out_dim))
-            if i < len(layer_sizes) - 2:
-                layers.append(nn.LeakyReLU())
-                layers.append(nn.Dropout(dropout_rate))
+        self.dropout_rate = dropout_rate
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self._build_net()
+
+    def _build_net(self) -> None:
+        layers = []
+        for i in range(len(self.layer_sizes) - 1):
+            in_dim = self.layer_sizes[i]
+            out_dim = self.layer_sizes[i + 1]
+            layers.append(nn.Linear(in_dim, out_dim))
+            if i < len(self.layer_sizes) - 2:
+                layers.append(nn.LeakyReLU())
+                layers.append(nn.Dropout(self.dropout_rate))
         self.net = nn.Sequential(*layers).to(self.device)
 
     def forward(self, x):
@@ -260,10 +264,28 @@ class VirtualANN(nn.Module):
 
     # Persistence helpers -------------------------------------------------
     def save(self, path: str):
-        torch.save({k: v.cpu() for k, v in self.state_dict().items()}, path)
+        torch.save(
+            {
+                "state_dict": {k: v.cpu() for k, v in self.state_dict().items()},
+                "config": {
+                    "layer_sizes": self.layer_sizes,
+                    "dropout_rate": self.dropout_rate,
+                },
+            },
+            path,
+        )
 
     def load(self, path: str):
-        self.load_state_dict(torch.load(path, map_location=self.device))
+        state = torch.load(path, map_location=self.device)
+        if isinstance(state, dict) and "state_dict" in state:
+            cfg = state.get("config")
+            if cfg:
+                self.layer_sizes = cfg.get("layer_sizes", self.layer_sizes)
+                self.dropout_rate = cfg.get("dropout_rate", self.dropout_rate)
+                self._build_net()
+            self.load_state_dict(state["state_dict"])
+        else:
+            self.load_state_dict(state)
 
 
 class TransformerClassifier(nn.Module):
@@ -280,7 +302,9 @@ class TransformerClassifier(nn.Module):
         super().__init__()
         embed_dim = ((input_dim + nhead - 1) // nhead) * nhead
         self.proj = nn.Linear(input_dim, embed_dim)
-        encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=nhead, dropout=dropout, batch_first=True)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=embed_dim, nhead=nhead, dropout=dropout, batch_first=True
+        )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.classifier = nn.Linear(embed_dim, num_classes)
 
@@ -303,12 +327,33 @@ class PyTorchANN:
         nhead: int = 4,
         num_layers: int = 1,
     ):
+        self.input_dim = input_dim
+        self.num_classes = num_classes
+        self.dropout = dropout
+        self.nhead = nhead
+        self.num_layers = num_layers
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = TransformerClassifier(input_dim, num_classes, dropout, nhead, num_layers).to(self.device)
+        self._build_model()
 
-    def train_model(self, X: np.ndarray, y: np.ndarray, epochs: int, lr: float, batch_size: int):
+    def _build_model(self) -> None:
+        self.model = TransformerClassifier(
+            self.input_dim,
+            self.num_classes,
+            self.dropout,
+            self.nhead,
+            self.num_layers,
+        ).to(self.device)
+
+    def train_model(
+        self, X: np.ndarray, y: np.ndarray, epochs: int, lr: float, batch_size: int
+    ):
         dataset = TensorDataset(torch.from_numpy(X).float(), torch.from_numpy(y).long())
-        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=self.device.type == "cuda")
+        loader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            pin_memory=self.device.type == "cuda",
+        )
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
         self.model.train()
@@ -339,7 +384,32 @@ class PyTorchANN:
         return mean, var
 
     def save(self, path: str):
-        torch.save({k: v.cpu() for k, v in self.model.state_dict().items()}, path)
+        torch.save(
+            {
+                "state_dict": {k: v.cpu() for k, v in self.model.state_dict().items()},
+                "config": {
+                    "input_dim": self.input_dim,
+                    "num_classes": self.num_classes,
+                    "dropout": self.dropout,
+                    "nhead": self.nhead,
+                    "num_layers": self.num_layers,
+                },
+            },
+            path,
+        )
 
     def load(self, path: str):
-        self.model.load_state_dict(torch.load(path, map_location=self.device))
+        state = torch.load(path, map_location=self.device)
+        if isinstance(state, dict) and "state_dict" in state:
+            cfg = state.get("config")
+            if cfg:
+                self.input_dim = cfg.get("input_dim", self.input_dim)
+                self.num_classes = cfg.get("num_classes", self.num_classes)
+                self.dropout = cfg.get("dropout", self.dropout)
+                self.nhead = cfg.get("nhead", self.nhead)
+                self.num_layers = cfg.get("num_layers", self.num_layers)
+                self._build_model()
+            self.model.load_state_dict(state["state_dict"])
+        else:
+            self._build_model()
+            self.model.load_state_dict(state)
