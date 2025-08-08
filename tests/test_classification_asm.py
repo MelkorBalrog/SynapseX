@@ -28,6 +28,9 @@ class MinimalNeuralIP(RedundantNeuralIP):
             probs[0, self.pred] = 1.0
             return probs
 
+        def predict_class(self, X, mc_dropout: bool = False):
+            return torch.tensor([self.pred])
+
         def save(self, path):
             pass
 

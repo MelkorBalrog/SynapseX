@@ -240,7 +240,7 @@ class PyTorchANN:
             self._plot_training(loss_hist, acc_hist, prec_hist, rec_hist, f1_hist),
             self._plot_weights(),
         ]
-        preds = self.predict(X).argmax(dim=1).cpu().numpy()
+        preds = self.predict_class(X).cpu().numpy()
         figs.append(self._plot_confusion_matrix(y.cpu().numpy(), preds))
         figs = [fig for fig in figs if fig is not None]
 
@@ -291,23 +291,46 @@ class PyTorchANN:
             "regression_loss": float(reg_loss.item()),
         }
 
-    def predict(self, X: torch.Tensor, mc_dropout: bool = False) -> torch.Tensor:
+    def _infer_logits(self, X: torch.Tensor) -> torch.Tensor:
+        """Return model logits for ``X`` in evaluation mode."""
+
         X = self._format_input(X).to(self.device)
+        self.model.eval()
+        with torch.no_grad():
+            return self.model(X)
+
+    def predict(self, X: torch.Tensor, mc_dropout: bool = False) -> torch.Tensor:
+        """Return class probabilities for ``X``.
+
+        When ``mc_dropout`` is ``True`` the model performs multiple stochastic
+        forward passes with dropout enabled and returns the mean probability
+        distribution.  Otherwise a single deterministic pass is executed.
+        """
+
         if mc_dropout:
-            self.model.train()  # enable dropout
+            X = self._format_input(X).to(self.device)
+            self.model.train()  # enable dropout during inference
             preds = []
             with torch.no_grad():
                 for _ in range(self.hp.mc_dropout_passes):
                     preds.append(self.model(X))
             self.model.eval()  # restore evaluation mode
             mean = torch.stack(preds).mean(0)
-            self.model.eval()
             return nn.functional.softmax(mean, dim=1).cpu()
-        else:
-            self.model.eval()
-            with torch.no_grad():
-                logits = self.model(X)
-            return nn.functional.softmax(logits, dim=1).cpu()
+        logits = self._infer_logits(X)
+        return nn.functional.softmax(logits, dim=1).cpu()
+
+    def predict_class(self, X: torch.Tensor, mc_dropout: bool = False) -> torch.Tensor:
+        """Return the predicted class indices for ``X``.
+
+        This mirrors the classification logic used during training so that
+        inference produces consistent results.
+        """
+
+        if mc_dropout:
+            return self.predict(X, mc_dropout=True).argmax(dim=1)
+        logits = self._infer_logits(X)
+        return logits.argmax(dim=1).cpu()
 
     def detect_objects(self, X: torch.Tensor) -> Dict[str, torch.Tensor]:
         """Run the underlying model and return raw detection outputs.
@@ -343,10 +366,8 @@ class PyTorchANN:
         if len(X) == 0:
             return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0}
 
-        self.model.eval()
-        with torch.no_grad():
-            logits = self.model(self._format_input(X).to(self.device))
-            preds = logits.argmax(dim=1).cpu()
+        logits = self._infer_logits(X)
+        preds = logits.argmax(dim=1).cpu()
         logits = logits.cpu()
 
         y = y.cpu()

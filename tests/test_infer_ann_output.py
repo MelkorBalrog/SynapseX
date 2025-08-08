@@ -22,6 +22,9 @@ class DummyANN:
         probs[0, 1] = 1.0
         return probs
 
+    def predict_class(self, X, mc_dropout: bool = False):
+        return torch.tensor([1])
+
     def save(self, path):
         pass
 
