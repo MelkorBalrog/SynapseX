@@ -130,21 +130,61 @@ def morph_dilate(binary_image: np.ndarray, kernel_size: int = 3, iterations: int
     return out
 
 
+def process_shape_image(
+    pil_img: Image.Image,
+    target_size: int = 28,
+    canny_low: float = 50,
+    canny_high: float = 150,
+    dilation_iter: int = 1,
+) -> np.ndarray:
+    """Process a grayscale PIL image into a flattened edge map.
+
+    This helper applies Canny edge detection followed by morphological
+    dilation and resizing to ``target_size``.  The result is returned as a
+    flattened ``np.ndarray`` normalised to ``[0, 1]``.
+    """
+    try:
+        resample_lanczos = Image.Resampling.LANCZOS
+    except AttributeError:  # pragma: no cover - Pillow < 9
+        resample_lanczos = Image.LANCZOS
+    arr = np.array(pil_img, dtype=np.float32)
+    edges = canny_edge_detection(arr, canny_low, canny_high)
+    dilated = morph_dilate(edges, 3, dilation_iter)
+    norm_img = (
+        np.array(
+            Image.fromarray(dilated.astype(np.uint8)).resize(
+                (target_size, target_size), resample=resample_lanczos
+            ),
+            dtype=np.float32,
+        )
+        / 255.0
+    )
+    return norm_img.flatten()
+
+
 def preprocess_vehicle_image(
     source: Union[str, Image.Image], target_size: int = 28
 ) -> torch.Tensor:
-    """Convert ``source`` to a flattened grayscale tensor of size ``target_size``."""
+    """Preprocess ``source`` using the same edge pipeline as training.
+
+    The returned tensor matches the representation produced by
+    :func:`load_vehicle_dataset`, ensuring consistency between training and
+    inference.
+    """
     try:
-        resample = Image.Resampling.LANCZOS
+        resample_bicubic = Image.Resampling.BICUBIC
     except AttributeError:  # pragma: no cover - Pillow < 9
-        resample = Image.LANCZOS
+        resample_bicubic = Image.BICUBIC
     if isinstance(source, Image.Image):
-        img = source
+        pil_img = source.convert("L")
     else:
-        img = Image.open(source)
-    img = img.convert("L").resize((target_size, target_size), resample=resample)
-    arr = np.array(img, dtype=np.float32) / 255.0
-    return torch.from_numpy(arr.flatten())
+        pil_img = Image.open(source).convert("L")
+    bg_color = pil_img.getpixel((0, 0))
+    rotated = pil_img.rotate(
+        0, resample=resample_bicubic, expand=True, fillcolor=bg_color
+    )
+    processed = process_shape_image(rotated, target_size)
+    return torch.from_numpy(processed)
 
 
 def load_vehicle_dataset(
@@ -208,10 +248,8 @@ def load_process_shape_image(
 ) -> List[np.ndarray]:
     try:
         resample_bicubic = Image.Resampling.BICUBIC
-        resample_lanczos = Image.Resampling.LANCZOS
     except AttributeError:
         resample_bicubic = Image.BICUBIC
-        resample_lanczos = Image.LANCZOS
 
     pil_img = Image.open(path).convert("L")
     # Rotate around the background color to avoid introducing spurious edges
@@ -224,14 +262,15 @@ def load_process_shape_image(
         rotated = pil_img.rotate(
             angle, resample=resample_bicubic, expand=True, fillcolor=bg_color
         )
-        arr = np.array(rotated, dtype=np.float32)
-        edges = canny_edge_detection(arr, canny_low, canny_high)
-        dilated = morph_dilate(edges, 3, dilation_iter)
-        norm_img = np.array(
-            Image.fromarray(dilated.astype(np.uint8)).resize((target_size, target_size), resample=resample_lanczos),
-            dtype=np.float32,
-        ) / 255.0
-        processed_images.append(norm_img.flatten())
+        processed_images.append(
+            process_shape_image(
+                rotated,
+                target_size=target_size,
+                canny_low=canny_low,
+                canny_high=canny_high,
+                dilation_iter=dilation_iter,
+            )
+        )
     return processed_images
 
 
