@@ -18,6 +18,7 @@
 from dataclasses import replace
 from typing import Dict, Tuple, List, Optional
 
+import logging
 import matplotlib
 matplotlib.use("Agg")
 matplotlib.rcParams["figure.max_open_warning"] = 0
@@ -393,7 +394,13 @@ class PyTorchANN:
                 in_channels=self.hp.image_channels,
             ).to(self.device)
             # Allow loading models saved without positional embeddings
-            self.model.load_state_dict(state["state_dict"], strict=False)
+            result = self.model.load_state_dict(state["state_dict"], strict=False)
+            if result.missing_keys or result.unexpected_keys:
+                logging.warning(
+                    "load_state_dict missing keys: %s, unexpected keys: %s",
+                    result.missing_keys,
+                    result.unexpected_keys,
+                )
         else:
             patch_size = max(self.hp.image_size // 4, 1)
             embed_dim = patch_size * patch_size
@@ -410,7 +417,13 @@ class PyTorchANN:
                 nhead=self.hp.nhead,
                 in_channels=self.hp.image_channels,
             ).to(self.device)
-            self.model.load_state_dict(state, strict=False)
+            result = self.model.load_state_dict(state, strict=False)
+            if result.missing_keys or result.unexpected_keys:
+                logging.warning(
+                    "load_state_dict missing keys: %s, unexpected keys: %s",
+                    result.missing_keys,
+                    result.unexpected_keys,
+                )
 
 
     # ------------------------------------------------------------------
