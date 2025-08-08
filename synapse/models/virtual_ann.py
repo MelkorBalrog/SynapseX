@@ -24,11 +24,16 @@ windows to pop up showing the training curves.
 """
 
 from typing import List
+import logging
+
 import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 import matplotlib.pyplot as plt
+
+
+logger = logging.getLogger(__name__)
 
 
 class VirtualANN(nn.Module):
@@ -58,14 +63,21 @@ class VirtualANN(nn.Module):
         a notebook tab).  When used in non-GUI contexts the caller may
         simply call ``fig.show()`` on the returned figures.
         """
+        if not logging.getLogger().hasHandlers():
+            logging.basicConfig(level=logging.INFO)
         dataset = TensorDataset(torch.from_numpy(X).float(), torch.from_numpy(y).long())
-        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=self.device.type == "cuda")
+        loader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            pin_memory=self.device.type == "cuda",
+        )
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         loss_hist, acc_hist, prec_hist, rec_hist, f1_hist = [], [], [], [], []
         num_classes = self.layer_sizes[-1]
         self.train()
-        for _ in range(epochs):
+        for epoch in range(epochs):
             epoch_loss = 0.0
             correct = 0
             total = 0
@@ -104,6 +116,16 @@ class VirtualANN(nn.Module):
             prec_hist.append(float(np.mean(precs)))
             rec_hist.append(float(np.mean(recs)))
             f1_hist.append(float(np.mean(f1s)))
+            logger.info(
+                "Epoch %d/%d - loss: %.4f - acc: %.4f - precision: %.4f - recall: %.4f - f1: %.4f",
+                epoch + 1,
+                epochs,
+                loss_hist[-1],
+                acc_hist[-1],
+                prec_hist[-1],
+                rec_hist[-1],
+                f1_hist[-1],
+            )
         preds_full = self.predict(X)
 
         figs = []
