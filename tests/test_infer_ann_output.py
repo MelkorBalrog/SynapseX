@@ -15,7 +15,7 @@ class DummyMem:
 
 class DummyANN:
     def __init__(self):
-        self.hp = SimpleNamespace(image_size=1, image_channels=1)
+        self.hp = SimpleNamespace(image_size=1, image_channels=2)
 
     def predict(self, X, mc_dropout: bool = False):
         probs = torch.zeros((1, 2))

@@ -23,7 +23,7 @@ import shutil
 import pytest
 import torch
 
-sys.path.append(os.getcwd())
+sys.path.insert(0, os.getcwd())
 from synapsex.models import TransformerClassifier
 
 

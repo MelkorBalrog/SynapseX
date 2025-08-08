@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 import torch
 
-sys.path.append(os.getcwd())
+sys.path.insert(0, os.getcwd())
 
 from synapse.constants import IMAGE_BUFFER_BASE_ADDR_BYTES
 from synapse.models.redundant_ip import RedundantNeuralIP

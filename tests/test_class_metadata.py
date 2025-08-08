@@ -1,7 +1,7 @@
 import os
 import sys
 
-sys.path.append(os.getcwd())
+sys.path.insert(0, os.getcwd())
 
 from synapse.models.redundant_ip import RedundantNeuralIP
 from synapsex.config import hp
