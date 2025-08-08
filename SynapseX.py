@@ -35,7 +35,6 @@ import re
 import sys
 from contextlib import redirect_stdout
 from pathlib import Path
-from collections import Counter
 from typing import Iterable
 import tkinter as tk
 from tkinter import filedialog, ttk
@@ -45,8 +44,9 @@ from matplotlib.figure import Figure
 import numpy as np
 import torch
 
-from synapsex.image_processing import load_process_shape_image, load_vehicle_dataset
+from synapsex.image_processing import load_process_shape_image
 from synapsex.config import hp
+from synapsex.classification import classify_with_assembly, evaluate_with_assembly
 
 from synapse.soc import SoC
 from synapse.tracking import Detection, SortTracker
@@ -511,137 +511,6 @@ class SynapseXGUI(tk.Tk):
 
         soc.neural_ip.figures_by_ann.clear()
         soc.neural_ip.metrics_by_ann.clear()
-
-
-def classify_with_assembly(
-    image_path: str,
-    *,
-    angles: Iterable[int] = range(0, 360, 5),
-    soc: SoC | None = None,
-):
-    """Classify ``image_path`` running the assembly program on all rotations.
-
-    Parameters
-    ----------
-    image_path:
-        Path to the image file to classify.
-    angles:
-        Iterable of rotation angles in degrees. By default the image is
-        rotated every 5° to match the training augmentation.
-    soc:
-        Optional :class:`~synapse.soc.SoC` instance. When ``None`` a fresh
-        instance is created.
-
-    Returns
-    -------
-    (index, label):
-        Tuple containing the predicted class index and its name (when class
-        metadata is available).
-    """
-
-    # Mirror the preprocessing performed during training so inference receives
-    # identically formatted tensors.  ``load_process_shape_image`` is used by
-    # :func:`load_vehicle_dataset` which prepares the training set.
-
-    soc = soc or SoC()
-    asm_lines = load_asm_file(Path("asm") / "classification.asm")
-    soc.load_assembly(asm_lines)
-
-    processed_list = load_process_shape_image(
-        str(image_path), target_size=hp.image_size, angles=angles
-    )
-
-    base_addr = IMAGE_BUFFER_BASE_ADDR_BYTES // 4
-    preds: list[int] = []
-
-    for processed in processed_list:
-        # Convert to a tensor before flattening to mimic the training pipeline
-        tensor = torch.from_numpy(processed)
-        flat = tensor.flatten().numpy()
-
-        for i, val in enumerate(flat):
-            word = np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
-            soc.memory.write(base_addr + i, int(word))
-
-        soc.cpu.pc = 0
-        soc.cpu.running = True
-        for reg in list(soc.cpu.regs):
-            if reg != "$zero":
-                soc.cpu.regs[reg] = 0
-        soc.run(max_steps=3000)
-        preds.append(soc.cpu.get_reg("$t9"))
-
-    counts = Counter(preds)
-    result = max(counts.items(), key=lambda kv: kv[1])[0]
-    names = soc.neural_ip.class_names
-    label = names[result] if names and 0 <= result < len(names) else result
-    return result, label
-
-
-def evaluate_with_assembly(train_dir: str, *, rotate: bool = True, soc: SoC | None = None):
-    """Classify all images in ``train_dir`` using the assembly pipeline.
-
-    Parameters
-    ----------
-    train_dir:
-        Path to the training data directory structured by class
-        subfolders.
-    rotate:
-        Whether to apply the same rotation augmentation used during
-        training.  Tests may disable this for speed.
-    soc:
-        Optional :class:`~synapse.soc.SoC` instance.  When ``None`` a new
-        instance is created with ``train_dir`` so class metadata is
-        available.
-
-    Returns
-    -------
-    (metrics, confusion):
-        ``metrics`` is a dictionary with accuracy, precision, recall and
-        F1 score. ``confusion`` is a ``(num_classes, num_classes)``
-        matrix where rows correspond to ground truth labels and columns
-        to predictions.
-    """
-
-    soc = soc or SoC(train_data_dir=train_dir)
-    asm_lines = load_asm_file(Path("asm") / "classification.asm")
-    X, y, class_names = load_vehicle_dataset(train_dir, target_size=hp.image_size, rotate=rotate)
-    soc.load_assembly(asm_lines)
-    preds: list[int] = []
-    base_addr = IMAGE_BUFFER_BASE_ADDR_BYTES // 4
-    for img in X:
-        flat = img.flatten().numpy()
-        for i, val in enumerate(flat):
-            word = np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
-            soc.memory.write(base_addr + i, int(word))
-        soc.cpu.pc = 0
-        soc.cpu.running = True
-        for reg in list(soc.cpu.regs):
-            if reg != "$zero":
-                soc.cpu.regs[reg] = 0
-        soc.run(max_steps=3000)
-        preds.append(soc.cpu.get_reg("$t9"))
-
-    y_np = y.numpy()
-    preds_np = np.array(preds)
-    num_classes = len(class_names)
-    cm = np.zeros((num_classes, num_classes), dtype=int)
-    for t, p in zip(y_np, preds_np):
-        cm[t, p] += 1
-    precision_list = []
-    recall_list = []
-    for c in range(num_classes):
-        tp = cm[c, c]
-        fp = cm[:, c].sum() - tp
-        fn = cm[c, :].sum() - tp
-        precision_list.append(tp / (tp + fp + 1e-8))
-        recall_list.append(tp / (tp + fn + 1e-8))
-    precision = float(sum(precision_list) / num_classes)
-    recall = float(sum(recall_list) / num_classes)
-    f1 = float(2 * precision * recall / (precision + recall + 1e-8))
-    accuracy = float((preds_np == y_np).mean())
-    metrics = {"accuracy": accuracy, "precision": precision, "recall": recall, "f1": f1}
-    return metrics, cm
 
 
 def main() -> None:
