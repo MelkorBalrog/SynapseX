@@ -236,7 +236,12 @@ class RedundantNeuralIP:
         )
         result = int(probs.argmax(dim=1)[0])
         self._argmax[ann_id] = result
-        print(f"ANN {ann_id} prediction: {result}")
+        label = (
+            self.class_names[result]
+            if self.class_names and 0 <= result < len(self.class_names)
+            else result
+        )
+        print(f"ANN {ann_id} prediction: {label}")
         return result
 
     # ------------------------------------------------------------------
