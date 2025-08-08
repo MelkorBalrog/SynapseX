@@ -42,7 +42,8 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 import numpy as np
 
-from synapsex.image_processing import load_process_shape_image
+from synapsex.image_processing import load_process_shape_image, load_vehicle_dataset
+from synapsex.config import hp
 
 from synapse.soc import SoC
 from synapse.tracking import Detection, SortTracker
@@ -518,6 +519,72 @@ class SynapseXGUI(tk.Tk):
         soc.neural_ip.metrics_by_ann.clear()
 
 
+def evaluate_with_assembly(train_dir: str, *, rotate: bool = True, soc: SoC | None = None):
+    """Classify all images in ``train_dir`` using the assembly pipeline.
+
+    Parameters
+    ----------
+    train_dir:
+        Path to the training data directory structured by class
+        subfolders.
+    rotate:
+        Whether to apply the same rotation augmentation used during
+        training.  Tests may disable this for speed.
+    soc:
+        Optional :class:`~synapse.soc.SoC` instance.  When ``None`` a new
+        instance is created with ``train_dir`` so class metadata is
+        available.
+
+    Returns
+    -------
+    (metrics, confusion):
+        ``metrics`` is a dictionary with accuracy, precision, recall and
+        F1 score. ``confusion`` is a ``(num_classes, num_classes)``
+        matrix where rows correspond to ground truth labels and columns
+        to predictions.
+    """
+
+    soc = soc or SoC(train_data_dir=train_dir)
+    asm_lines = load_asm_file(Path("asm") / "classification.asm")
+    X, y, class_names = load_vehicle_dataset(train_dir, target_size=hp.image_size, rotate=rotate)
+    soc.load_assembly(asm_lines)
+    preds: list[int] = []
+    base_addr = IMAGE_BUFFER_BASE_ADDR_BYTES // 4
+    for img in X:
+        flat = img.flatten().numpy()
+        for i, val in enumerate(flat):
+            word = np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
+            soc.memory.write(base_addr + i, int(word))
+        soc.cpu.pc = 0
+        soc.cpu.running = True
+        for reg in list(soc.cpu.regs):
+            if reg != "$zero":
+                soc.cpu.regs[reg] = 0
+        soc.run(max_steps=3000)
+        preds.append(soc.cpu.get_reg("$t9"))
+
+    y_np = y.numpy()
+    preds_np = np.array(preds)
+    num_classes = len(class_names)
+    cm = np.zeros((num_classes, num_classes), dtype=int)
+    for t, p in zip(y_np, preds_np):
+        cm[t, p] += 1
+    precision_list = []
+    recall_list = []
+    for c in range(num_classes):
+        tp = cm[c, c]
+        fp = cm[:, c].sum() - tp
+        fn = cm[c, :].sum() - tp
+        precision_list.append(tp / (tp + fp + 1e-8))
+        recall_list.append(tp / (tp + fn + 1e-8))
+    precision = float(sum(precision_list) / num_classes)
+    recall = float(sum(recall_list) / num_classes)
+    f1 = float(2 * precision * recall / (precision + recall + 1e-8))
+    accuracy = float((preds_np == y_np).mean())
+    metrics = {"accuracy": accuracy, "precision": precision, "recall": recall, "f1": f1}
+    return metrics, cm
+
+
 def main() -> None:
     if len(sys.argv) == 1 or sys.argv[1].lower() == "gui":
         try:
@@ -552,7 +619,7 @@ def main() -> None:
             print(f"Image '{image_path}' not found.")
             return
         soc = SoC()
-        processed = load_process_shape_image(str(image_path), angles=[0])[0]
+        processed = load_process_shape_image(str(image_path), target_size=hp.image_size, angles=[0])[0]
         base_addr_bytes = IMAGE_BUFFER_BASE_ADDR_BYTES
         for i, val in enumerate(processed):
             word = np.frombuffer(np.float32(val).tobytes(), dtype=np.uint32)[0]
@@ -564,6 +631,19 @@ def main() -> None:
         names = soc.neural_ip.class_names
         label = names[result] if names and 0 <= result < len(names) else result
         print(f"\nClassification Phase Completed!\nPredicted class: {label}")
+    elif mode == "test":
+        if len(sys.argv) < 3:
+            print("Usage: python SynapseX.py test /path/to/train_data")
+            return
+        train_dir = Path(sys.argv[2])
+        if not train_dir.is_dir():
+            print(f"Training data directory '{train_dir}' not found.")
+            return
+        metrics, cm = evaluate_with_assembly(str(train_dir))
+        print("\nTest Phase Completed!")
+        for k, v in metrics.items():
+            print(f"{k.capitalize()}: {v:.4f}")
+        print("Confusion matrix:\n", cm)
     elif mode == "track":
         if len(sys.argv) < 3:
             print("Usage: python SynapseX.py track path/to/detections.txt")
@@ -587,7 +667,7 @@ def main() -> None:
             boxes = [(t.id, t.bbox.tolist()) for t in tracks]
             print(f"Frame {frame}: {boxes}")
     else:
-        print("Unknown mode. Use 'train', 'classify', 'track' or 'gui'.")
+        print("Unknown mode. Use 'train', 'classify', 'test', 'track' or 'gui'.")
 
 
 if __name__ == "__main__":

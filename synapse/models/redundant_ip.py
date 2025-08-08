@@ -248,7 +248,9 @@ class RedundantNeuralIP:
             return
         addr_bytes = IMAGE_BUFFER_BASE_ADDR_BYTES
         addr = addr_bytes // 4
-        in_dim = ann.hp.image_size * ann.hp.image_size
+        in_dim = (
+            ann.hp.image_channels * ann.hp.image_size * ann.hp.image_size
+        )
         data: List[float] = []
         for i in range(in_dim):
             word = memory.read(addr + i)

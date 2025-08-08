@@ -15,18 +15,19 @@ from synapse.hardware.memory import WishboneMemory
 def test_ann_receives_written_image_data():
     ip = RedundantNeuralIP()
     img_size = 2
-    pattern = np.arange(img_size * img_size, dtype=np.float32)
+    img_channels = 3
+    pattern = np.arange(img_channels * img_size * img_size, dtype=np.float32)
 
     class MockANN:
-        def __init__(self, size):
-            self.hp = SimpleNamespace(image_size=size)
+        def __init__(self, size, channels):
+            self.hp = SimpleNamespace(image_size=size, image_channels=channels)
             self.last_tensor = None
 
         def predict(self, tensor, mc_dropout=False):
             self.last_tensor = tensor
             return torch.zeros((1, 1))
 
-    ip.ann_map[0] = MockANN(img_size)
+    ip.ann_map[0] = MockANN(img_size, img_channels)
     memory = WishboneMemory()
     base_words = IMAGE_BUFFER_BASE_ADDR_BYTES // 4
     for i, val in enumerate(pattern):

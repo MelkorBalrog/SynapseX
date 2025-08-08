@@ -301,6 +301,7 @@ class PyTorchANN:
                     preds.append(self.model(X))
             self.model.eval()  # restore evaluation mode
             mean = torch.stack(preds).mean(0)
+            self.model.eval()
             return nn.functional.softmax(mean, dim=1).cpu()
         else:
             self.model.eval()
