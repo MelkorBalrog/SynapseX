@@ -489,34 +489,35 @@ class PyTorchANN:
         return fig
 
     def _plot_confusion_matrix(self, y_true: np.ndarray, y_pred: np.ndarray):
-        num_classes = int(max(y_true.max(), y_pred.max()) + 1)
-        cm = np.zeros((num_classes, num_classes), dtype=int)
+        cm = np.zeros((2, 2), dtype=int)
         for t, p in zip(y_true, y_pred):
-            cm[int(t), int(p)] += 1
+            if t == 1 and p == 1:
+                cm[1, 1] += 1  # TP
+            elif t == 1 and p == 0:
+                cm[1, 0] += 1  # FN
+            elif t == 0 and p == 1:
+                cm[0, 1] += 1  # FP
+            else:
+                cm[0, 0] += 1  # TN
         fig, ax = plt.subplots()
         im = ax.imshow(cm, cmap=plt.cm.Blues)
         fig.colorbar(im, ax=ax)
         ax.set_xlabel("Predicted")
         ax.set_ylabel("Actual")
-        ax.set_xticks(range(num_classes))
-        ax.set_yticks(range(num_classes))
+        ax.set_xticks([0, 1])
+        ax.set_yticks([0, 1])
         ax.set_title("Confusion Matrix")
-        if num_classes == 2:
-            labels = np.array([["TN", "FP"], ["FN", "TP"]])
-            for i in range(num_classes):
-                for j in range(num_classes):
-                    ax.text(
-                        j,
-                        i,
-                        f"{labels[i, j]}: {cm[i, j]}",
-                        ha="center",
-                        va="center",
-                        color="black",
-                    )
-        else:
-            for i in range(num_classes):
-                for j in range(num_classes):
-                    ax.text(j, i, str(cm[i, j]), ha="center", va="center", color="black")
+        labels = np.array([["TN", "FP"], ["FN", "TP"]])
+        for i in range(2):
+            for j in range(2):
+                ax.text(
+                    j,
+                    i,
+                    f"{labels[i, j]}: {cm[i, j]}",
+                    ha="center",
+                    va="center",
+                    color="black",
+                )
         plt.tight_layout()
         return fig
 
