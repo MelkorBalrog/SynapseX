@@ -69,7 +69,10 @@ def test_classification_asm_majority(tmp_path):
         soc.cpu.neural_ip = soc.neural_ip
         soc.load_assembly(lines)
 
-        soc.run(max_steps=500)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            soc.run(max_steps=500)
+        output = buf.getvalue()
 
         # GET_NUM_CLASSES result stored in $s0
         assert soc.cpu.get_reg("$s0") == 3
@@ -79,6 +82,11 @@ def test_classification_asm_majority(tmp_path):
         base = soc.data_map["ann_preds"] // 4
         preds = [soc.memory.read(base + i) for i in range(3)]
         assert preds == [0, 1, 1]
+
+        # Individual ANN predictions printed as class names
+        assert "ANN 0 prediction: a" in output
+        assert "ANN 1 prediction: b" in output
+        assert "ANN 2 prediction: b" in output
 
         # Final majority vote computed in assembly
         assert soc.cpu.get_reg("$t9") == 1
