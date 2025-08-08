@@ -54,7 +54,11 @@ pip install -r requirements.txt
 python SynapseX.py gui                # launch the GUI
 python SynapseX.py train data/        # train on images in data/
 python SynapseX.py classify img.png   # classify an image
+python SynapseX.py classify img.png --debug  # include per-step debug output
 ```
+
+Pass `--debug` to print CPU state at each instruction or `--step` to advance
+interactively.
 
 ## Vehicle Classification and Object Detection
 

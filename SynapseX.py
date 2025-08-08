@@ -25,8 +25,8 @@ command line or through a graphical interface.
 Usage::
 
     python SynapseX.py gui
-    python SynapseX.py train /path/to/train_data
-    python SynapseX.py classify path/to/image.png
+    python SynapseX.py train /path/to/train_data [--debug | --step]
+    python SynapseX.py classify path/to/image.png [--debug | --step]
 """
 
 from __future__ import annotations
@@ -166,9 +166,12 @@ class SynapseXGUI(tk.Tk):
         self.asm_tree.bind("<<TreeviewSelect>>", self.on_select_asm)
 
         ttk.Separator(right, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5)
+        self.debug_var = tk.BooleanVar(value=False)
+        debug_cb = ttk.Checkbutton(right, text="Debug", variable=self.debug_var)
+        debug_cb.pack(anchor="w", padx=5)
 
         run_btn = ttk.Button(right, text="Run Program", command=self.run_selected)
-        run_btn.pack(fill=tk.X, padx=5)
+        run_btn.pack(fill=tk.X, padx=5, pady=(0, 5))
 
         self.dark_mode_btn = ttk.Button(
             right, text="Dark Mode", command=self.toggle_dark_mode
@@ -425,7 +428,7 @@ class SynapseXGUI(tk.Tk):
         buf = io.StringIO()
         try:
             with redirect_stdout(buf):
-                soc.run(max_steps=3000)
+                soc.run(max_steps=3000, debug=self.debug_var.get())
         except tk.TclError as exc:
             buf.write(f"\nTk error: {exc}\n")
         out = buf.getvalue()
@@ -480,7 +483,12 @@ class SynapseXGUI(tk.Tk):
 
 
 def main() -> None:
-    if len(sys.argv) == 1 or sys.argv[1].lower() == "gui":
+    args = sys.argv[1:]
+    debug = "--debug" in args
+    step = "--step" in args
+    args = [a for a in args if a not in ("--debug", "--step")]
+
+    if not args or args[0].lower() == "gui":
         try:
             gui = SynapseXGUI()
         except tk.TclError as exc:
@@ -489,26 +497,29 @@ def main() -> None:
         gui.mainloop()
         return
 
-    mode = sys.argv[1].lower()
+    mode = args[0].lower()
 
     if mode == "train":
-        if len(sys.argv) < 3:
-            print("Usage: python SynapseX.py train /path/to/train_data")
+        if len(args) < 2:
+            print("Usage: python SynapseX.py train /path/to/train_data [--debug | --step]")
             return
-        train_dir = Path(sys.argv[2])
+        train_dir = Path(args[1])
         if not train_dir.is_dir():
             print(f"Training data directory '{train_dir}' not found.")
             return
         soc = SoC(train_data_dir=str(train_dir))
         asm_lines = load_asm_file(Path("asm") / "training.asm")
         soc.load_assembly(asm_lines)
-        soc.run(max_steps=3000)
+        if step:
+            soc.debug_run(max_steps=3000)
+        else:
+            soc.run(max_steps=3000, debug=debug)
         print("\nTraining Phase Completed!")
     elif mode == "classify":
-        if len(sys.argv) < 3:
-            print("Usage: python SynapseX.py classify path/to/image.png")
+        if len(args) < 2:
+            print("Usage: python SynapseX.py classify path/to/image.png [--debug | --step]")
             return
-        image_path = Path(sys.argv[2])
+        image_path = Path(args[1])
         if not image_path.is_file():
             print(f"Image '{image_path}' not found.")
             return
@@ -520,16 +531,19 @@ def main() -> None:
             soc.memory.write(base_addr_bytes // 4 + i, int(word))
         asm_lines = load_asm_file(Path("asm") / "classification.asm")
         soc.load_assembly(asm_lines)
-        soc.run(max_steps=3000)
+        if step:
+            soc.debug_run(max_steps=3000)
+        else:
+            soc.run(max_steps=3000, debug=debug)
         result = soc.cpu.get_reg("$t9")
         names = soc.neural_ip.class_names
         label = names[result] if names and 0 <= result < len(names) else result
         print(f"\nClassification Phase Completed!\nPredicted class: {label}")
     elif mode == "track":
-        if len(sys.argv) < 3:
+        if len(args) < 2:
             print("Usage: python SynapseX.py track path/to/detections.txt")
             return
-        det_file = Path(sys.argv[2])
+        det_file = Path(args[1])
         if not det_file.is_file():
             print(f"Detections file '{det_file}' not found.")
             return
