@@ -28,13 +28,13 @@ ADD $s0, $zero, $t9            ; $s0 holds hp.num_classes
 OP_NEUR LOAD_ALL trained_weights
 
 ; (C) Perform Inference on the 3 Principal ANNs and fetch argmax directly
-OP_NEUR INFER_ANN 0 true 10
+OP_NEUR INFER_ANN 0
 OP_NEUR GET_ARGMAX 0
 SW $t9, ann_preds              ; store ANN0 prediction
-OP_NEUR INFER_ANN 1 true 10
+OP_NEUR INFER_ANN 1
 OP_NEUR GET_ARGMAX 1
 SW $t9, ann_preds+4            ; store ANN1 prediction
-OP_NEUR INFER_ANN 2 true 10
+OP_NEUR INFER_ANN 2
 OP_NEUR GET_ARGMAX 2
 SW $t9, ann_preds+8            ; store ANN2 prediction
 
