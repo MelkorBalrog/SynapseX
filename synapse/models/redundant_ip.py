@@ -194,7 +194,7 @@ class RedundantNeuralIP:
                             self.class_names = list(data["class_names"])
                     except (OSError, ValueError, json.JSONDecodeError):
                         pass
-            if self.train_data_dir and self.class_names is None:
+            if self.train_data_dir:
                 self._load_class_metadata()
             dropout = float(tokens[2]) if len(tokens) >= 3 else hp.dropout
             hparams = HyperParameters(**{**hp.__dict__, "dropout": dropout})
