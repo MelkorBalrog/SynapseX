@@ -74,18 +74,18 @@ def double_threshold_and_hysteresis(img: np.ndarray, low_threshold: float, high_
     weak[weak_mask] = weak_val
     out = strong.copy()
     M, N = img.shape
-    changed = True
-    while changed:
-        changed = False
-        for i in range(1, M - 1):
-            for j in range(1, N - 1):
-                if weak[i, j] == weak_val and out[i, j] != strong_val:
-                    neighbors = out[i - 1 : i + 2, j - 1 : j + 2]
-                    if (neighbors == strong_val).any():
-                        out[i, j] = strong_val
-                        changed = True
-        if not changed:
-            break
+    from collections import deque
+    q = deque(zip(*np.where(strong_mask)))
+    while q:
+        i, j = q.popleft()
+        for di in (-1, 0, 1):
+            for dj in (-1, 0, 1):
+                if di == 0 and dj == 0:
+                    continue
+                ni, nj = i + di, j + dj
+                if 0 <= ni < M and 0 <= nj < N and weak[ni, nj] == weak_val and out[ni, nj] != strong_val:
+                    out[ni, nj] = strong_val
+                    q.append((ni, nj))
     return (out == strong_val).astype(np.uint8) * 255
 
 
