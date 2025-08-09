@@ -30,6 +30,8 @@ hand-written characters.
   emulated hardware or launch neural-network operations.
 - **Graphical interface.** `python SynapseX.py gui` opens a Tk GUI to edit and
   execute assembly files, load images and inspect results.
+- **Line-numbered assembly editor.** A dedicated gutter keeps line numbers in
+  sync with the assembly text for easier debugging.
 - **Dark mode.** The ASM editor now launches in dark mode with magenta numbers
   and can toggle to a light theme for comfortable coding.
 - **Training and inference.** Neural networks can be trained on a directory of
@@ -37,11 +39,15 @@ hand-written characters.
 - **Evaluation metrics.** Training curves track loss, accuracy, precision,
   recall and F1 while a confusion matrix visualises classification results for
   any number of classes.
+- **Dynamic classes.** The number of output classes and image channels are
+  inferred from the dataset and propagated through the model and metrics.
 - **Validation-based early stopping.** Training monitors a held-out validation
   split, restoring the best model weights to avoid the "stuck at one class"
   behaviour and improve overall metrics.
 - **Genetic algorithm tuning.** A tiny GA explores learning rates, dropout and
   transformer depth to squeeze out better accuracy, recall, precision and F1.
+- **Device-aware GA.** Hyper-parameter search accepts an explicit device so
+  tuning can leverage GPUs when available.
 - **Target-metrics training.** Optimisation halts when validation F1 stalls,
   preserving the model state that achieved the strongest score.
 
