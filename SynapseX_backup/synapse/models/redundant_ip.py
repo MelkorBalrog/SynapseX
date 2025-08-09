@@ -215,6 +215,7 @@ class RedundantNeuralIP:
                 print("No training data directory specified; aborting training.")
                 return None
             logger.info("Building dataset from %s", self.train_data_dir)
+
             data_path = Path(self.train_data_dir) / "data.npy"
             labels_path = Path(self.train_data_dir) / "labels.npy"
             classes_path = Path(self.train_data_dir) / "classes.npy"
