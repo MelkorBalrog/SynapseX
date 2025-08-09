@@ -25,6 +25,9 @@ invoked directly from assembly via new ``TUNE_GA`` commands.
 
 from __future__ import annotations
 
+import logging
+import sys
+
 from collections import Counter
 from dataclasses import replace
 from pathlib import Path
@@ -41,6 +44,14 @@ from synapsex.config import HyperParameters, hp
 from synapsex.genetic import genetic_search
 from synapsex.neural import PyTorchANN
 from synapsex.image_processing import load_process_shape_image
+
+
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 
 class RedundantNeuralIP:
@@ -203,6 +214,8 @@ class RedundantNeuralIP:
             if not self.train_data_dir:
                 print("No training data directory specified; aborting training.")
                 return None
+            logger.info("Building dataset from %s", self.train_data_dir)
+
             data_path = Path(self.train_data_dir) / "data.npy"
             labels_path = Path(self.train_data_dir) / "labels.npy"
             classes_path = Path(self.train_data_dir) / "classes.npy"
@@ -237,6 +250,7 @@ class RedundantNeuralIP:
                     else:
                         label = img_path.parent.name
                     idx = label_to_idx[label]
+                    logger.info("Processing %s", img_path)
                     processed = load_process_shape_image(str(img_path))
                     X_list.extend(processed)
                     y_list.extend([idx] * len(processed))
@@ -248,7 +262,13 @@ class RedundantNeuralIP:
                 np.save(data_path, X)
                 np.save(labels_path, y)
                 np.save(classes_path, np.array(class_names, dtype=object))
+                logger.info(
+                    "Processed %d images across %d classes",
+                    len(X_list),
+                    len(class_names),
+                )
             else:
+                logger.info("Loading cached dataset from %s", self.train_data_dir)
                 X = np.load(data_path).astype(np.float32)
                 y = np.load(labels_path).astype(np.int64)
                 class_names = np.load(classes_path, allow_pickle=True).tolist()

@@ -15,9 +15,20 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import logging
+import sys
+
 import numpy as np
 from PIL import Image
 from typing import Iterable, List
+
+
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 
 def gaussian_kernel(size: int = 5, sigma: float = 1.4) -> np.ndarray:
@@ -143,7 +154,10 @@ def load_process_shape_image(
     # as strong gradients, resulting in thick square artefacts after rotation.
     bg_color = pil_img.getpixel((0, 0))
     processed_images = []
-    for angle in angles:
+    angle_list = list(angles)
+    logger.info("Processing %s with %d angles", path, len(angle_list))
+    for idx, angle in enumerate(angle_list, 1):
+        logger.info("  angle %d/%d: %d", idx, len(angle_list), angle)
         rotated = pil_img.rotate(
             angle, resample=resample_bicubic, expand=True, fillcolor=bg_color
         )
