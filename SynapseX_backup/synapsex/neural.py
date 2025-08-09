@@ -19,7 +19,7 @@ from dataclasses import replace
 from typing import Dict, Tuple, List, Optional
 
 import logging
-
+import sys
 import matplotlib
 matplotlib.use("Agg")
 matplotlib.rcParams["figure.max_open_warning"] = 0
@@ -33,7 +33,11 @@ from .config import hp, HyperParameters
 from .models import TransformerClassifier
 
 logger = logging.getLogger(__name__)
-
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 class PyTorchANN:
     """Wrapper around a PyTorch model with training and inference helpers.
@@ -118,9 +122,6 @@ class PyTorchANN:
         The function always generates training curves, weight heatmaps and a
         confusion matrix for consumers such as the GUI.  Callers can decide
         how to display or embed the returned figures."""
-
-        if not logging.getLogger().hasHandlers():
-            logging.basicConfig(level=logging.INFO)
 
         # Split the data into a deterministic training/validation partition so
         # early stopping decisions are based on unseen samples.  Datasets used
