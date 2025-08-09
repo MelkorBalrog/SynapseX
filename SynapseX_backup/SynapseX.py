@@ -139,7 +139,6 @@ class SynapseXGUI(tk.Tk):
         left_paned.pack(fill=tk.BOTH, expand=1)
 
         self.asm_frame = ttk.Frame(left_paned)
-        self.asm_font = tkfont.Font(family="Consolas", size=11)
         self.asm_line_numbers = tk.Text(
             self.asm_frame,
             width=4,
@@ -148,9 +147,9 @@ class SynapseXGUI(tk.Tk):
             borderwidth=0,
             highlightthickness=0,
             state="disabled",
-            font=self.asm_font,
+            font=("Consolas", 11),
         )
-        self.asm_text = tk.Text(self.asm_frame, wrap="none", font=self.asm_font)
+        self.asm_text = tk.Text(self.asm_frame, wrap="none", font=("Consolas", 11))
         self.asm_text.tag_configure("instr", foreground="#0066CC")
         self.asm_text.tag_configure("number", foreground="#CC0000")
         self.asm_text.tag_configure("comment", foreground="#008000")
