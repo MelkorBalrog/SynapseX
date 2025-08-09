@@ -138,19 +138,36 @@ class SynapseXGUI(tk.Tk):
         left_paned.pack(fill=tk.BOTH, expand=1)
 
         self.asm_frame = ttk.Frame(left_paned)
+        self.asm_line_numbers = tk.Text(
+            self.asm_frame,
+            width=4,
+            padx=3,
+            takefocus=0,
+            borderwidth=0,
+            highlightthickness=0,
+            state="disabled",
+            font=("Consolas", 11),
+        )
         self.asm_text = tk.Text(self.asm_frame, wrap="none", font=("Consolas", 11))
         self.asm_text.tag_configure("instr", foreground="#0066CC")
         self.asm_text.tag_configure("number", foreground="#CC0000")
         self.asm_text.tag_configure("comment", foreground="#008000")
+        self.asm_text.tag_configure("register", foreground="#FFA500")
         self.asm_text.bind("<<Modified>>", self._on_asm_modified)
         x_scroll = ttk.Scrollbar(self.asm_frame, orient="horizontal", command=self.asm_text.xview)
-        y_scroll = ttk.Scrollbar(self.asm_frame, orient="vertical", command=self.asm_text.yview)
-        self.asm_text.configure(xscrollcommand=x_scroll.set, yscrollcommand=y_scroll.set)
-        self.asm_text.grid(row=0, column=0, sticky="nsew")
-        y_scroll.grid(row=0, column=1, sticky="ns")
-        x_scroll.grid(row=1, column=0, sticky="ew")
+        self.asm_vscroll = ttk.Scrollbar(
+            self.asm_frame, orient="vertical", command=self._on_asm_scroll
+        )
+        self.asm_text.configure(
+            xscrollcommand=x_scroll.set, yscrollcommand=self._on_asm_yview
+        )
+        self.asm_line_numbers.configure(yscrollcommand=self._on_asm_yview)
+        self.asm_line_numbers.grid(row=0, column=0, sticky="ns")
+        self.asm_text.grid(row=0, column=1, sticky="nsew")
+        self.asm_vscroll.grid(row=0, column=2, sticky="ns")
+        x_scroll.grid(row=1, column=1, sticky="ew")
         self.asm_frame.rowconfigure(0, weight=1)
-        self.asm_frame.columnconfigure(0, weight=1)
+        self.asm_frame.columnconfigure(1, weight=1)
         left_paned.add(self.asm_frame, weight=3)
 
         self.results_nb = ScrollableNotebook(left_paned)
@@ -180,6 +197,7 @@ class SynapseXGUI(tk.Tk):
 
         for asm_path in sorted(Path("asm").glob("*.asm")):
             self.asm_tree.insert("", tk.END, iid=str(asm_path), text=asm_path.name)
+        self._update_line_numbers()
 
     def _create_scrolled_text(self, parent: tk.Widget) -> tuple[ttk.Frame, tk.Text]:
         """Return a text widget with horizontal and vertical scrollbars."""
@@ -194,6 +212,26 @@ class SynapseXGUI(tk.Tk):
         frame.rowconfigure(0, weight=1)
         frame.columnconfigure(0, weight=1)
         return frame, text
+
+    def _on_asm_scroll(self, *args) -> None:
+        """Scroll assembly text and line numbers together."""
+        self.asm_text.yview(*args)
+        self.asm_line_numbers.yview(*args)
+
+    def _on_asm_yview(self, *args) -> None:
+        """Update scrollbar and line numbers when text widget scrolls."""
+        self.asm_vscroll.set(*args)
+        self.asm_line_numbers.yview_moveto(args[0])
+
+    def _update_line_numbers(self) -> None:
+        """Refresh line numbers for the assembly text widget."""
+        line_count = int(self.asm_text.index("end-1c").split(".")[0])
+        numbers = "\n".join(str(i) for i in range(1, line_count + 1))
+        self.asm_line_numbers.configure(state="normal")
+        self.asm_line_numbers.delete("1.0", tk.END)
+        if numbers:
+            self.asm_line_numbers.insert("1.0", numbers)
+        self.asm_line_numbers.configure(state="disabled")
 
     def _create_scrolled_figure(self, parent: tk.Widget, fig: Figure) -> ttk.Frame:
         """Return a frame that displays ``fig`` with horizontal and vertical scrollbars."""
@@ -373,10 +411,12 @@ class SynapseXGUI(tk.Tk):
             self._highlight_asm()
 
     def _highlight_asm(self) -> None:
+        self._update_line_numbers()
         text = self.asm_text.get("1.0", tk.END)
         self.asm_text.tag_remove("instr", "1.0", tk.END)
         self.asm_text.tag_remove("number", "1.0", tk.END)
         self.asm_text.tag_remove("comment", "1.0", tk.END)
+        self.asm_text.tag_remove("register", "1.0", tk.END)
         for line_no, line in enumerate(text.splitlines(), start=1):
             code, sep, _comment = line.partition(";")
             tokens = code.split()
@@ -393,6 +433,10 @@ class SynapseXGUI(tk.Tk):
                 num_start = f"{line_no}.{match.start()}"
                 num_end = f"{line_no}.{match.end()}"
                 self.asm_text.tag_add("number", num_start, num_end)
+            for match in re.finditer(r"\$[A-Za-z0-9]+", code):
+                reg_start = f"{line_no}.{match.start()}"
+                reg_end = f"{line_no}.{match.end()}"
+                self.asm_text.tag_add("register", reg_start, reg_end)
             if sep:
                 col = len(code)
                 start = f"{line_no}.{col}"

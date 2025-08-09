@@ -75,13 +75,15 @@ def _evaluate(
     y_train: torch.Tensor,
     X_val: torch.Tensor,
     y_val: torch.Tensor,
+    *,
+    device: torch.device | str | None = None,
 ) -> Tuple[float, "PyTorchANN"]:
     """Train a model with ``hparams`` and return (F1 score, model)."""
 
     # Local import to avoid a circular dependency at module load time.
     from .neural import PyTorchANN
 
-    ann = PyTorchANN(hparams)
+    ann = PyTorchANN(hparams, device=device)
     ann.train(X_train, y_train)
     metrics = ann.evaluate(X_val, y_val)
     return metrics["f1"], ann
@@ -92,6 +94,8 @@ def genetic_search(
     y: torch.Tensor,
     generations: int = 5,
     population_size: int = 8,
+    *,
+    device: torch.device | str | None = None,
 ) -> Tuple[HyperParameters, "PyTorchANN"]:
     """Run a tiny genetic algorithm and return the best network and parameters.
 
@@ -126,7 +130,8 @@ def genetic_search(
 
     for _ in range(generations):
         evaluated = [
-            _evaluate(ind, X_train, y_train, X_val, y_val) for ind in population
+            _evaluate(ind, X_train, y_train, X_val, y_val, device=device)
+            for ind in population
         ]
         scores = [e[0] for e in evaluated]
         anns = [e[1] for e in evaluated]
@@ -178,7 +183,8 @@ def genetic_search(
 
     # Final evaluation to consider the last generation.
     evaluated = [
-        _evaluate(ind, X_train, y_train, X_val, y_val) for ind in population
+        _evaluate(ind, X_train, y_train, X_val, y_val, device=device)
+        for ind in population
     ]
     scores = [e[0] for e in evaluated]
     anns = [e[1] for e in evaluated]
