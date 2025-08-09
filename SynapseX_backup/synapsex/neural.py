@@ -20,6 +20,7 @@ from typing import Dict, Tuple, List, Optional
 
 import logging
 import sys
+
 import matplotlib
 matplotlib.use("Agg")
 matplotlib.rcParams["figure.max_open_warning"] = 0
@@ -38,6 +39,7 @@ if not logger.handlers:
     handler.setFormatter(logging.Formatter("%(message)s"))
     logger.addHandler(handler)
 logger.setLevel(logging.INFO)
+
 
 class PyTorchANN:
     """Wrapper around a PyTorch model with training and inference helpers.
@@ -184,14 +186,14 @@ class PyTorchANN:
             f1_hist.append(train_metrics["f1"])
 
             val_metrics = self.evaluate(val_X, val_y)
-            logger.info(
-                "Epoch %d/%d - loss: %.4f - train_f1: %.4f - val_f1: %.4f",
-                epoch + 1,
-                self.hp.epochs,
-                loss_hist[-1],
-                f1_hist[-1],
-                val_metrics["f1"],
+            msg = (
+                f"Epoch {epoch + 1}/{self.hp.epochs} - "
+                f"loss: {loss_hist[-1]:.4f} - "
+                f"train_f1: {f1_hist[-1]:.4f} - "
+                f"val_f1: {val_metrics['f1']:.4f}"
             )
+            logger.info(msg)
+            print(msg, flush=True)
             if val_metrics["f1"] > best_f1 + 1e-4:
                 best_f1 = val_metrics["f1"]
                 best_state = self.model.state_dict()
