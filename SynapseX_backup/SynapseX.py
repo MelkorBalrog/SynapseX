@@ -37,6 +37,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, ttk
+import tkinter.font as tkfont
 from tkinter.scrolledtext import ScrolledText
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
@@ -138,6 +139,7 @@ class SynapseXGUI(tk.Tk):
         left_paned.pack(fill=tk.BOTH, expand=1)
 
         self.asm_frame = ttk.Frame(left_paned)
+        self.asm_font = tkfont.Font(family="Consolas", size=11)
         self.asm_line_numbers = tk.Text(
             self.asm_frame,
             width=4,
@@ -146,9 +148,9 @@ class SynapseXGUI(tk.Tk):
             borderwidth=0,
             highlightthickness=0,
             state="disabled",
-            font=("Consolas", 11),
+            font=self.asm_font,
         )
-        self.asm_text = tk.Text(self.asm_frame, wrap="none", font=("Consolas", 11))
+        self.asm_text = tk.Text(self.asm_frame, wrap="none", font=self.asm_font)
         self.asm_text.tag_configure("instr", foreground="#0066CC")
         self.asm_text.tag_configure("number", foreground="#CC0000")
         self.asm_text.tag_configure("comment", foreground="#008000")
