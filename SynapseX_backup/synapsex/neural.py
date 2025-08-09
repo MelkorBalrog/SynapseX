@@ -18,6 +18,8 @@
 from dataclasses import replace
 from typing import Dict, Tuple, List, Optional
 
+import logging
+
 import matplotlib
 matplotlib.use("Agg")
 matplotlib.rcParams["figure.max_open_warning"] = 0
@@ -30,6 +32,8 @@ from torch.utils.data import DataLoader, TensorDataset
 from .config import hp, HyperParameters
 from .models import TransformerClassifier
 
+logger = logging.getLogger(__name__)
+
 
 class PyTorchANN:
     """Wrapper around a PyTorch model with training and inference helpers.
@@ -40,9 +44,17 @@ class PyTorchANN:
         Optional ``HyperParameters`` instance.  When provided it overrides the
         global configuration and allows techniques such as genetic algorithms to
         propose new hyper-parameter sets.
+    device:
+        Explicit device on which the model should run.  Defaults to ``cuda`` when
+        available.
     """
 
-    def __init__(self, hp_override: Optional[HyperParameters] = None):
+    def __init__(
+        self,
+        hp_override: Optional[HyperParameters] = None,
+        *,
+        device: torch.device | str | None = None,
+    ):
         self.hp = hp_override or hp
         patch_size = max(self.hp.image_size // 4, 1)
         embed_dim = patch_size * patch_size
@@ -51,34 +63,43 @@ class PyTorchANN:
                 if embed_dim % candidate == 0:
                     self.hp = replace(self.hp, nhead=candidate)
                     break
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(
+            device
+            if device is not None
+            else ("cuda" if torch.cuda.is_available() else "cpu")
+        )
         self.model = TransformerClassifier(
             self.hp.image_size,
-            num_classes=3,
+            num_classes=self.hp.num_classes,
             dropout=self.hp.dropout,
             num_layers=self.hp.num_layers,
             nhead=self.hp.nhead,
+            in_channels=self.hp.image_channels,
         ).to(self.device)
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
     def _format_input(self, X: torch.Tensor) -> torch.Tensor:
-        """Reshape tensors to ``(N, 1, image_size, image_size)``.
+        """Reshape tensors to ``(N, image_channels, image_size, image_size)``.
 
         Training and inference code often provides flattened images of shape
-        ``(N, image_size * image_size)``.  The transformer-based classifier,
-        however, expects 4D image tensors.  This helper centralises the
-        conversion so all call sites consistently feed the network correctly
+        ``(N, image_channels * image_size * image_size)``.  The transformer-based
+        classifier, however, expects 4D image tensors.  This helper centralises
+        the conversion so all call sites consistently feed the network correctly
         shaped inputs.
         """
 
         if X.dim() == 1:
             X = X.unsqueeze(0)
         if X.dim() == 2:
-            return X.view(-1, 1, self.hp.image_size, self.hp.image_size)
-        if X.dim() == 3 and X.size(1) == 1:
-            return X.view(-1, 1, self.hp.image_size, self.hp.image_size)
+            return X.view(
+                -1, self.hp.image_channels, self.hp.image_size, self.hp.image_size
+            )
+        if X.dim() == 3 and X.size(1) == self.hp.image_channels:
+            return X.view(
+                -1, self.hp.image_channels, self.hp.image_size, self.hp.image_size
+            )
         if X.dim() == 4:
             return X
         raise ValueError(f"Unexpected input shape {tuple(X.shape)}")
@@ -97,6 +118,9 @@ class PyTorchANN:
         The function always generates training curves, weight heatmaps and a
         confusion matrix for consumers such as the GUI.  Callers can decide
         how to display or embed the returned figures."""
+
+        if not logging.getLogger().hasHandlers():
+            logging.basicConfig(level=logging.INFO)
 
         # Split the data into a deterministic training/validation partition so
         # early stopping decisions are based on unseen samples.  Datasets used
@@ -137,7 +161,7 @@ class PyTorchANN:
         best_state: Optional[dict] = None
         stale_epochs = 0
 
-        for _ in range(self.hp.epochs):
+        for epoch in range(self.hp.epochs):
             epoch_loss = 0.0
             total = 0
             for xb, yb in train_loader:
@@ -159,6 +183,14 @@ class PyTorchANN:
             f1_hist.append(train_metrics["f1"])
 
             val_metrics = self.evaluate(val_X, val_y)
+            logger.info(
+                "Epoch %d/%d - loss: %.4f - train_f1: %.4f - val_f1: %.4f",
+                epoch + 1,
+                self.hp.epochs,
+                loss_hist[-1],
+                f1_hist[-1],
+                val_metrics["f1"],
+            )
             if val_metrics["f1"] > best_f1 + 1e-4:
                 best_f1 = val_metrics["f1"]
                 best_state = self.model.state_dict()
@@ -240,6 +272,7 @@ class PyTorchANN:
         *,
         generations: int = 5,
         population_size: int = 8,
+        device: torch.device | str | None = None,
     ) -> None:
         """Use a genetic algorithm and adopt the best performing network.
 
@@ -250,7 +283,11 @@ class PyTorchANN:
         from .genetic import genetic_search
 
         best_hp, best_ann = genetic_search(
-            X, y, generations=generations, population_size=population_size
+            X,
+            y,
+            generations=generations,
+            population_size=population_size,
+            device=device if device is not None else self.device,
         )
         self.hp = best_hp
         self.model = best_ann.model
@@ -274,10 +311,11 @@ class PyTorchANN:
                             break
             self.model = TransformerClassifier(
                 self.hp.image_size,
-                num_classes=3,
+                num_classes=self.hp.num_classes,
                 dropout=self.hp.dropout,
                 num_layers=self.hp.num_layers,
                 nhead=self.hp.nhead,
+                in_channels=self.hp.image_channels,
             ).to(self.device)
             # Allow loading models saved without positional embeddings
             self.model.load_state_dict(state["state_dict"], strict=False)
@@ -291,10 +329,11 @@ class PyTorchANN:
                         break
             self.model = TransformerClassifier(
                 self.hp.image_size,
-                num_classes=3,
+                num_classes=self.hp.num_classes,
                 dropout=self.hp.dropout,
                 num_layers=self.hp.num_layers,
                 nhead=self.hp.nhead,
+                in_channels=self.hp.image_channels,
             ).to(self.device)
             self.model.load_state_dict(state, strict=False)
 
@@ -349,10 +388,11 @@ class PyTorchANN:
         return fig
 
     def _plot_confusion_matrix(self, y_true: np.ndarray, y_pred: np.ndarray):
-        num_classes = int(max(y_true.max(), y_pred.max()) + 1)
+        num_classes = self.hp.num_classes
         cm = np.zeros((num_classes, num_classes), dtype=int)
         for t, p in zip(y_true, y_pred):
-            cm[int(t), int(p)] += 1
+            if 0 <= t < num_classes and 0 <= p < num_classes:
+                cm[int(t), int(p)] += 1
         fig, ax = plt.subplots()
         im = ax.imshow(cm, cmap=plt.cm.Blues)
         fig.colorbar(im, ax=ax)
