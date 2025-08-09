@@ -20,7 +20,6 @@ from typing import Dict, Tuple, List, Optional
 
 import logging
 import sys
-
 import matplotlib
 matplotlib.use("Agg")
 matplotlib.rcParams["figure.max_open_warning"] = 0
@@ -39,7 +38,6 @@ if not logger.handlers:
     handler.setFormatter(logging.Formatter("%(message)s"))
     logger.addHandler(handler)
 logger.setLevel(logging.INFO)
-
 
 class PyTorchANN:
     """Wrapper around a PyTorch model with training and inference helpers.
