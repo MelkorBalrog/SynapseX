@@ -52,13 +52,15 @@ def _load_asm_file(path: str | Path) -> list[str]:
 def classify_with_assembly(
     image_path: str,
     *,
-    angles: Iterable[int] = range(0, 360, 5),
+    angles: Iterable[int] = (0,),
     soc: SoC | None = None,
 ):
-    """Classify ``image_path`` running the assembly program on all rotations.
+    """Classify ``image_path`` using the assembly program.
 
-    The preprocessing exactly matches the training pipeline to ensure
-    consistent results.
+    By default the image is processed once without any rotation.  An
+    optional iterable of ``angles`` may be supplied to evaluate multiple
+    orientations, mirroring the data augmentation performed during
+    training.
     """
 
     soc = soc or SoC()
