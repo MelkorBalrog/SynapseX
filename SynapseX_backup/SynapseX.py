@@ -271,6 +271,7 @@ class SynapseXGUI(tk.Tk):
             number = "#CC0000"
             comment = "#008000"
         self.asm_text.configure(background=bg, foreground=fg, insertbackground=fg)
+        self.asm_line_numbers.configure(background=bg, foreground=fg)
         self.asm_text.tag_configure("instr", foreground=instr)
         self.asm_text.tag_configure("number", foreground=number)
         self.asm_text.tag_configure("comment", foreground=comment)
