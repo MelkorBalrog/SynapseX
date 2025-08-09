@@ -54,6 +54,14 @@ if not logger.handlers:
 logger.setLevel(logging.INFO)
 
 
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
+
 class RedundantNeuralIP:
     """Container for multiple ANNs addressable by an ID."""
 
@@ -167,7 +175,11 @@ class RedundantNeuralIP:
             mc_dropout=len(tokens) > 1 and tokens[1].lower() == "true",
         )
         self.last_result = int(probs.argmax(dim=1)[0])
-        print(f"ANN {ann_id} prediction: {self.last_result}")
+        if self.class_names and 0 <= self.last_result < len(self.class_names):
+            label = self.class_names[self.last_result]
+            print(f"ANN {ann_id} prediction: {label} ({self.last_result})")
+        else:
+            print(f"ANN {ann_id} prediction: {self.last_result}")
 
     # ------------------------------------------------------------------
     # TUNE_GA helpers
@@ -215,7 +227,6 @@ class RedundantNeuralIP:
                 print("No training data directory specified; aborting training.")
                 return None
             logger.info("Building dataset from %s", self.train_data_dir)
-
             data_path = Path(self.train_data_dir) / "data.npy"
             labels_path = Path(self.train_data_dir) / "labels.npy"
             classes_path = Path(self.train_data_dir) / "classes.npy"
@@ -276,4 +287,3 @@ class RedundantNeuralIP:
             self.class_names = class_names
             self._cached_dataset = (X, y, class_names)
         return self._cached_dataset
-

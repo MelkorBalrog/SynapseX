@@ -294,6 +294,26 @@ class SynapseXGUI(tk.Tk):
             self.asm_line_numbers.insert("1.0", numbers)
         self.asm_line_numbers.configure(state="disabled")
 
+    def _on_asm_scroll(self, *args) -> None:
+        """Scroll assembly text and line numbers together."""
+        self.asm_text.yview(*args)
+        self.asm_line_numbers.yview(*args)
+
+    def _on_asm_yview(self, *args) -> None:
+        """Update scrollbar and line numbers when text widget scrolls."""
+        self.asm_vscroll.set(*args)
+        self.asm_line_numbers.yview_moveto(args[0])
+
+    def _update_line_numbers(self) -> None:
+        """Refresh line numbers for the assembly text widget."""
+        line_count = int(self.asm_text.index("end-1c").split(".")[0])
+        numbers = "\n".join(str(i) for i in range(1, line_count + 1))
+        self.asm_line_numbers.configure(state="normal")
+        self.asm_line_numbers.delete("1.0", tk.END)
+        if numbers:
+            self.asm_line_numbers.insert("1.0", numbers)
+        self.asm_line_numbers.configure(state="disabled")
+
     def _create_scrolled_figure(self, parent: tk.Widget, fig: Figure) -> ttk.Frame:
         """Return a frame that displays ``fig`` with horizontal and vertical scrollbars."""
         frame = ttk.Frame(parent)
