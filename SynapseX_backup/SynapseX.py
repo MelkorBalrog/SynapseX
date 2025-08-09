@@ -37,6 +37,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, ttk
+import tkinter.font as tkfont
 from tkinter.scrolledtext import ScrolledText
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
