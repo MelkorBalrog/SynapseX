@@ -37,6 +37,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, ttk
+import tkinter.font as tkfont
 from tkinter.scrolledtext import ScrolledText
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
@@ -212,6 +213,106 @@ class SynapseXGUI(tk.Tk):
         frame.rowconfigure(0, weight=1)
         frame.columnconfigure(0, weight=1)
         return frame, text
+
+    def _on_asm_scroll(self, *args) -> None:
+        """Scroll assembly text and line numbers together."""
+        self.asm_text.yview(*args)
+        self.asm_line_numbers.yview(*args)
+
+    def _on_asm_yview(self, *args) -> None:
+        """Update scrollbar and line numbers when text widget scrolls."""
+        self.asm_vscroll.set(*args)
+        self.asm_line_numbers.yview_moveto(args[0])
+
+    def _update_line_numbers(self) -> None:
+        """Refresh line numbers for the assembly text widget."""
+        line_count = int(self.asm_text.index("end-1c").split(".")[0])
+        numbers = "\n".join(str(i) for i in range(1, line_count + 1))
+        self.asm_line_numbers.configure(state="normal")
+        self.asm_line_numbers.delete("1.0", tk.END)
+        if numbers:
+            self.asm_line_numbers.insert("1.0", numbers)
+        self.asm_line_numbers.configure(state="disabled")
+
+    def _on_asm_scroll(self, *args) -> None:
+        """Scroll assembly text and line numbers together."""
+        self.asm_text.yview(*args)
+        self.asm_line_numbers.yview(*args)
+
+    def _on_asm_yview(self, *args) -> None:
+        """Update scrollbar and line numbers when text widget scrolls."""
+        self.asm_vscroll.set(*args)
+        self.asm_line_numbers.yview_moveto(args[0])
+
+    def _update_line_numbers(self) -> None:
+        """Refresh line numbers for the assembly text widget."""
+        line_count = int(self.asm_text.index("end-1c").split(".")[0])
+        numbers = "\n".join(str(i) for i in range(1, line_count + 1))
+        self.asm_line_numbers.configure(state="normal")
+        self.asm_line_numbers.delete("1.0", tk.END)
+        if numbers:
+            self.asm_line_numbers.insert("1.0", numbers)
+        self.asm_line_numbers.configure(state="disabled")
+
+    def _on_asm_scroll(self, *args) -> None:
+        """Scroll assembly text and line numbers together."""
+        self.asm_text.yview(*args)
+        self.asm_line_numbers.yview(*args)
+
+    def _on_asm_yview(self, *args) -> None:
+        """Update scrollbar and line numbers when text widget scrolls."""
+        self.asm_vscroll.set(*args)
+        self.asm_line_numbers.yview_moveto(args[0])
+
+    def _update_line_numbers(self) -> None:
+        """Refresh line numbers for the assembly text widget."""
+        line_count = int(self.asm_text.index("end-1c").split(".")[0])
+        numbers = "\n".join(str(i) for i in range(1, line_count + 1))
+        self.asm_line_numbers.configure(state="normal")
+        self.asm_line_numbers.delete("1.0", tk.END)
+        if numbers:
+            self.asm_line_numbers.insert("1.0", numbers)
+        self.asm_line_numbers.configure(state="disabled")
+
+    def _on_asm_scroll(self, *args) -> None:
+        """Scroll assembly text and line numbers together."""
+        self.asm_text.yview(*args)
+        self.asm_line_numbers.yview(*args)
+
+    def _on_asm_yview(self, *args) -> None:
+        """Update scrollbar and line numbers when text widget scrolls."""
+        self.asm_vscroll.set(*args)
+        self.asm_line_numbers.yview_moveto(args[0])
+
+    def _update_line_numbers(self) -> None:
+        """Refresh line numbers for the assembly text widget."""
+        line_count = int(self.asm_text.index("end-1c").split(".")[0])
+        numbers = "\n".join(str(i) for i in range(1, line_count + 1))
+        self.asm_line_numbers.configure(state="normal")
+        self.asm_line_numbers.delete("1.0", tk.END)
+        if numbers:
+            self.asm_line_numbers.insert("1.0", numbers)
+        self.asm_line_numbers.configure(state="disabled")
+
+    def _on_asm_scroll(self, *args) -> None:
+        """Scroll assembly text and line numbers together."""
+        self.asm_text.yview(*args)
+        self.asm_line_numbers.yview(*args)
+
+    def _on_asm_yview(self, *args) -> None:
+        """Update scrollbar and line numbers when text widget scrolls."""
+        self.asm_vscroll.set(*args)
+        self.asm_line_numbers.yview_moveto(args[0])
+
+    def _update_line_numbers(self) -> None:
+        """Refresh line numbers for the assembly text widget."""
+        line_count = int(self.asm_text.index("end-1c").split(".")[0])
+        numbers = "\n".join(str(i) for i in range(1, line_count + 1))
+        self.asm_line_numbers.configure(state="normal")
+        self.asm_line_numbers.delete("1.0", tk.END)
+        if numbers:
+            self.asm_line_numbers.insert("1.0", numbers)
+        self.asm_line_numbers.configure(state="disabled")
 
     def _on_asm_scroll(self, *args) -> None:
         """Scroll assembly text and line numbers together."""

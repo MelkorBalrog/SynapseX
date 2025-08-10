@@ -54,6 +54,22 @@ if not logger.handlers:
 logger.setLevel(logging.INFO)
 
 
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
+
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
+
 class RedundantNeuralIP:
     """Container for multiple ANNs addressable by an ID."""
 
@@ -285,4 +301,3 @@ class RedundantNeuralIP:
             self.class_names = class_names
             self._cached_dataset = (X, y, class_names)
         return self._cached_dataset
-
