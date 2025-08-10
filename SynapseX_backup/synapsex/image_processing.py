@@ -15,9 +15,20 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import logging
+import sys
+
 import numpy as np
 from PIL import Image
 from typing import Iterable, List
+
+
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 
 def gaussian_kernel(size: int = 5, sigma: float = 1.4) -> np.ndarray:
@@ -74,18 +85,18 @@ def double_threshold_and_hysteresis(img: np.ndarray, low_threshold: float, high_
     weak[weak_mask] = weak_val
     out = strong.copy()
     M, N = img.shape
-    changed = True
-    while changed:
-        changed = False
-        for i in range(1, M - 1):
-            for j in range(1, N - 1):
-                if weak[i, j] == weak_val and out[i, j] != strong_val:
-                    neighbors = out[i - 1 : i + 2, j - 1 : j + 2]
-                    if (neighbors == strong_val).any():
-                        out[i, j] = strong_val
-                        changed = True
-        if not changed:
-            break
+    from collections import deque
+    q = deque(zip(*np.where(strong_mask)))
+    while q:
+        i, j = q.popleft()
+        for di in (-1, 0, 1):
+            for dj in (-1, 0, 1):
+                if di == 0 and dj == 0:
+                    continue
+                ni, nj = i + di, j + dj
+                if 0 <= ni < M and 0 <= nj < N and weak[ni, nj] == weak_val and out[ni, nj] != strong_val:
+                    out[ni, nj] = strong_val
+                    q.append((ni, nj))
     return (out == strong_val).astype(np.uint8) * 255
 
 
@@ -143,7 +154,10 @@ def load_process_shape_image(
     # as strong gradients, resulting in thick square artefacts after rotation.
     bg_color = pil_img.getpixel((0, 0))
     processed_images = []
-    for angle in angles:
+    angle_list = list(angles)
+    logger.info("Processing %s with %d angles", path, len(angle_list))
+    for idx, angle in enumerate(angle_list, 1):
+        logger.info("  angle %d/%d: %d", idx, len(angle_list), angle)
         rotated = pil_img.rotate(
             angle, resample=resample_bicubic, expand=True, fillcolor=bg_color
         )

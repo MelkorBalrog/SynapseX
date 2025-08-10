@@ -25,6 +25,9 @@ invoked directly from assembly via new ``TUNE_GA`` commands.
 
 from __future__ import annotations
 
+import logging
+import sys
+
 from collections import Counter
 from dataclasses import replace
 from pathlib import Path
@@ -43,6 +46,14 @@ from synapsex.neural import PyTorchANN
 from synapsex.image_processing import load_process_shape_image
 
 
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
+
 class RedundantNeuralIP:
     """Container for multiple ANNs addressable by an ID."""
 
@@ -50,7 +61,8 @@ class RedundantNeuralIP:
         self.ann_map: Dict[int, PyTorchANN] = {}
         self.last_result: int | None = None
         self.train_data_dir = train_data_dir
-        self._cached_dataset: tuple[np.ndarray, np.ndarray] | None = None
+        self._cached_dataset: tuple[np.ndarray, np.ndarray, List[str]] | None = None
+        self.class_names: List[str] | None = None
         # Metrics and figures generated during training keyed by ANN ID
         self.metrics_by_ann: Dict[int, Dict[str, float]] = {}
         self.figures_by_ann: Dict[int, List] = {}
@@ -81,6 +93,9 @@ class RedundantNeuralIP:
             for ann_id, ann in self.ann_map.items():
                 try:
                     ann.load(f"{prefix}_{ann_id}.pt")
+                    if ann.class_names and not self.class_names:
+                        self.class_names = ann.class_names
+                        hp.num_classes = len(self.class_names)
                 except FileNotFoundError:
                     pass
 
@@ -115,10 +130,18 @@ class RedundantNeuralIP:
         dataset = self._load_dataset()
         if dataset is None:
             return
-        X, y = dataset
+        X, y, _ = dataset
 
-        # Update only the epoch count; GA-tuned learning rate and batch size are preserved
-        ann.hp = replace(ann.hp, epochs=epochs)
+        # Ensure ANN reflects current dataset class count
+        ann.hp = replace(
+            ann.hp,
+            epochs=epochs,
+            num_classes=hp.num_classes,
+            image_channels=hp.image_channels,
+        )
+        ann = PyTorchANN(ann.hp, device=ann.device)
+        ann.class_names = self.class_names
+        self.ann_map[ann_id] = ann
         metrics, figs = ann.train(torch.from_numpy(X), torch.from_numpy(y))
         for old in self.figures_by_ann.get(ann_id, []):
             plt.close(old)
@@ -148,7 +171,13 @@ class RedundantNeuralIP:
             mc_dropout=len(tokens) > 1 and tokens[1].lower() == "true",
         )
         self.last_result = int(probs.argmax(dim=1)[0])
-        print(f"ANN {ann_id} prediction: {self.last_result}")
+        if not self.class_names and ann.class_names:
+            self.class_names = ann.class_names
+        if self.class_names and 0 <= self.last_result < len(self.class_names):
+            label = self.class_names[self.last_result]
+            print(f"ANN {ann_id} prediction: {label} ({self.last_result})")
+        else:
+            print(f"ANN {ann_id} prediction: {self.last_result}")
 
     # ------------------------------------------------------------------
     # TUNE_GA helpers
@@ -163,11 +192,15 @@ class RedundantNeuralIP:
         dataset = self._load_dataset()
         if dataset is None:
             return
-        X, y = dataset
+        X, y, _ = dataset
 
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         best_hp, best_ann = genetic_search(
-            torch.from_numpy(X), torch.from_numpy(y),
-            generations=generations, population_size=population,
+            torch.from_numpy(X),
+            torch.from_numpy(y),
+            generations=generations,
+            population_size=population,
+            device=device,
         )
         self.ann_map[ann_id] = best_ann
 
@@ -191,23 +224,45 @@ class RedundantNeuralIP:
             if not self.train_data_dir:
                 print("No training data directory specified; aborting training.")
                 return None
+            logger.info("Building dataset from %s", self.train_data_dir)
             data_path = Path(self.train_data_dir) / "data.npy"
             labels_path = Path(self.train_data_dir) / "labels.npy"
-            if not data_path.exists() or not labels_path.exists():
+            classes_path = Path(self.train_data_dir) / "classes.npy"
+            if not data_path.exists() or not labels_path.exists() or not classes_path.exists():
                 X_list: List[np.ndarray] = []
                 y_list: List[int] = []
-                letter2label = {"A": 0, "B": 1, "C": 2}
-                image_files = (
-                    sorted(Path(self.train_data_dir).glob("*.png"))
-                    + sorted(Path(self.train_data_dir).glob("*.jpg"))
-                )
-                for img_path in image_files:
-                    letter = img_path.stem.split("_")[0].upper()
-                    if letter not in letter2label:
-                        continue
+                class_names: List[str] = []
+                label_to_idx: Dict[str, int] = {}
+                # Support both subdirectory-per-class and flat filename_prefix schemes
+                image_paths = []
+                base_dir = Path(self.train_data_dir)
+                subdirs = [d for d in base_dir.iterdir() if d.is_dir()]
+                if subdirs:
+                    for idx, d in enumerate(sorted(subdirs)):
+                        label_to_idx[d.name] = idx
+                        class_names.append(d.name)
+                        image_paths.extend(
+                            sorted(d.glob("*.png")) + sorted(d.glob("*.jpg"))
+                        )
+                else:
+                    image_paths = (
+                        sorted(base_dir.glob("*.png")) + sorted(base_dir.glob("*.jpg"))
+                    )
+                    for img in image_paths:
+                        label = img.stem.split("_")[0]
+                        if label not in label_to_idx:
+                            label_to_idx[label] = len(label_to_idx)
+                            class_names.append(label)
+                for img_path in image_paths:
+                    if img_path.parent == base_dir:
+                        label = img_path.stem.split("_")[0]
+                    else:
+                        label = img_path.parent.name
+                    idx = label_to_idx[label]
+                    logger.info("Processing %s", img_path)
                     processed = load_process_shape_image(str(img_path))
                     X_list.extend(processed)
-                    y_list.extend([letter2label[letter]] * len(processed))
+                    y_list.extend([idx] * len(processed))
                 if not X_list:
                     print("No training images found; aborting training.")
                     return None
@@ -215,9 +270,19 @@ class RedundantNeuralIP:
                 y = np.array(y_list, dtype=np.int64)
                 np.save(data_path, X)
                 np.save(labels_path, y)
+                np.save(classes_path, np.array(class_names, dtype=object))
+                logger.info(
+                    "Processed %d images across %d classes",
+                    len(X_list),
+                    len(class_names),
+                )
             else:
+                logger.info("Loading cached dataset from %s", self.train_data_dir)
                 X = np.load(data_path).astype(np.float32)
                 y = np.load(labels_path).astype(np.int64)
-            self._cached_dataset = (X, y)
+                class_names = np.load(classes_path, allow_pickle=True).tolist()
+            hp.num_classes = len(class_names)
+            self.class_names = class_names
+            self._cached_dataset = (X, y, class_names)
         return self._cached_dataset
 
