@@ -82,6 +82,7 @@ class PyTorchANN:
             nhead=self.hp.nhead,
             in_channels=self.hp.image_channels,
         ).to(self.device)
+        self.class_names: Optional[List[str]] = None
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -297,7 +298,14 @@ class PyTorchANN:
 
     def save(self, path: str) -> None:
         state = {k: v.cpu() for k, v in self.model.state_dict().items()}
-        torch.save({"state_dict": state, "hp": self.hp.__dict__}, path)
+        torch.save(
+            {
+                "state_dict": state,
+                "hp": self.hp.__dict__,
+                "class_names": self.class_names,
+            },
+            path,
+        )
 
     def load(self, path: str) -> None:
         state = torch.load(path, map_location="cpu")
@@ -322,6 +330,7 @@ class PyTorchANN:
             ).to(self.device)
             # Allow loading models saved without positional embeddings
             self.model.load_state_dict(state["state_dict"], strict=False)
+            self.class_names = state.get("class_names")
         else:
             patch_size = max(self.hp.image_size // 4, 1)
             embed_dim = patch_size * patch_size
@@ -339,6 +348,7 @@ class PyTorchANN:
                 in_channels=self.hp.image_channels,
             ).to(self.device)
             self.model.load_state_dict(state, strict=False)
+            self.class_names = None
 
 
     # ------------------------------------------------------------------

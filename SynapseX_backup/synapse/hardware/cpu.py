@@ -70,6 +70,10 @@ class CPU:
             if self.neural_ip.last_result is not None:
                 result = self.get_reg("$t9")
                 names = getattr(self.neural_ip, "class_names", None)
+                if not names and getattr(self.neural_ip, "ann_map", None):
+                    ann0 = next(iter(self.neural_ip.ann_map.values()), None)
+                    if ann0 is not None:
+                        names = getattr(ann0, "class_names", None)
                 if names and 0 <= result < len(names):
                     print(f"Final classification: {names[result]}")
                 else:

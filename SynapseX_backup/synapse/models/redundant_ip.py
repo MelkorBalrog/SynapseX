@@ -62,6 +62,14 @@ if not logger.handlers:
 logger.setLevel(logging.INFO)
 
 
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
+
 class RedundantNeuralIP:
     """Container for multiple ANNs addressable by an ID."""
 
@@ -101,6 +109,9 @@ class RedundantNeuralIP:
             for ann_id, ann in self.ann_map.items():
                 try:
                     ann.load(f"{prefix}_{ann_id}.pt")
+                    if ann.class_names and not self.class_names:
+                        self.class_names = ann.class_names
+                        hp.num_classes = len(self.class_names)
                 except FileNotFoundError:
                     pass
 
@@ -145,6 +156,7 @@ class RedundantNeuralIP:
             image_channels=hp.image_channels,
         )
         ann = PyTorchANN(ann.hp, device=ann.device)
+        ann.class_names = self.class_names
         self.ann_map[ann_id] = ann
         metrics, figs = ann.train(torch.from_numpy(X), torch.from_numpy(y))
         for old in self.figures_by_ann.get(ann_id, []):
@@ -175,6 +187,8 @@ class RedundantNeuralIP:
             mc_dropout=len(tokens) > 1 and tokens[1].lower() == "true",
         )
         self.last_result = int(probs.argmax(dim=1)[0])
+        if not self.class_names and ann.class_names:
+            self.class_names = ann.class_names
         if self.class_names and 0 <= self.last_result < len(self.class_names):
             label = self.class_names[self.last_result]
             print(f"ANN {ann_id} prediction: {label} ({self.last_result})")
